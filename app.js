@@ -4,7 +4,10 @@
 
     const app = express();
 
-    app.use(cors());
+    app.use(cors({
+    origin: '*',
+        }));
+
 
     // Initialize database connection
     connectDB().catch(err => {
