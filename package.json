@@ -1,0 +1,18 @@
+{
+  "name": "dev-wiz",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "mongoose": "^8.16.0",
+    "nodemon": "^3.1.10",
+    "stream": "^0.0.3"
+  }
+}
