@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-      "start": "node app.js",
+    "start": "node app.js",
     "build": "echo 'No build step'"
   },
   "keywords": [],
@@ -12,6 +12,7 @@
   "description": "",
   "dependencies": {
     "archiver": "^7.0.1",
+    "express": "^5.1.0",
     "mongoose": "^8.16.0",
     "nodemon": "^3.1.10",
     "stream": "^0.0.3"
