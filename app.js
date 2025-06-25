@@ -18,7 +18,7 @@
     app.use(express.json());
 
 
-    app.use('/layouts', require('./routes/layout.routes'));
+    app.use('/layouts', ('./routes/layout.routes'));
 
     // Error handling middleware (should be after all other middleware/routes)
     app.use((err, req, res, next) => {
