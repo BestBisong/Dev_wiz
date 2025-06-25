@@ -58,7 +58,6 @@ function generateHTMLAndCSS(elements) {
             case 'section':
                 elementHTML = `<section class="${className}">${content || ''}</section>`;
                 break;
-            // Add more cases as needed
             default:
                 elementHTML = `<div class="${className}">${content || ''}</div>`;
         }
