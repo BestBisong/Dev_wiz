@@ -24,7 +24,9 @@
         archive.on('error', (err) => {
         throw new Error(`Archive error: ${err.message}`);
         });
-
+          // Set headers before piping
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="my layout.zip"`);
         // Set response headers
         res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
         archive.pipe(res);
@@ -46,8 +48,10 @@
         await archive.finalize();
 
     } catch (error) {
-        next(error);
-    }
+          console.error("Download failed:", error);
+    res.status(500).json({
+      error: "Failed to generate download",
+    });
     };
 
     exports.getLayout = async (req, res, next) => {
