@@ -1,73 +1,80 @@
-    const Layout = require('../models/layout.model');
-    const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
     const archiver = require('archiver');
+    const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
+    const Layout = require('../models/layout.model');
 
-    exports.createLayout = async (req, res, next) => {
+    exports.createLayout = async (req, res) => {
     try {
         // Validate input
         if (!req.body.elements || !Array.isArray(req.body.elements)) {
-        return res.status(400).json({
+        return res.status(400).json({ 
             status: 'error',
-            message: 'Invalid elements data'
+            message: 'Elements array is required'
         });
         }
 
-        const { elements, name = 'Untitled Layout' } = req.body;
-
+        const { elements, name = 'my_layout' } = req.body;
+        
         // Generate HTML and CSS
         const { html, css } = generateHTMLAndCSS(elements);
-
-        // Create zip archive
-        const archive = archiver('zip', { zlib: { level: 9 } });
         
-        // Handle archive errors
-        archive.on('error', (err) => {
-        throw new Error(`Archive error: ${err.message}`);
+        // Create archive
+        const archive = archiver('zip', {
+        zlib: { level: 9 } // Maximum compression
         });
-          // Set headers before piping
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="my layout.zip"`);
+
         // Set response headers
-        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+        res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${name.replace(/[^a-z0-9]/gi, '_')}.zip"`
+        });
+
+        // Pipe archive to response
         archive.pipe(res);
 
         // Add files to archive
         archive.append(html, { name: 'index.html' });
         archive.append(css, { name: 'styles.css' });
 
-
-        const newLayout = new Layout({
+        // Optional: Save to database
+        await Layout.create({
         name,
         layoutJSON: elements,
         generatedHTML: html,
         generatedCSS: css
         });
-        await newLayout.save();
 
-        // Finalize the archive
+        // Finalize the archive (this will send the response)
         await archive.finalize();
 
     } catch (error) {
-          console.error("Download failed:", error);
-    res.status(500).json({
-      error: "Failed to generate download",
-    });
-    };
-
-    exports.getLayout = async (req, res, next) => {
-    try {
-        const layout = await Layout.findById(req.params.id);
-        if (!layout) {
-        return res.status(404).json({
+        console.error('Error generating layout:', error);
+        
+        // Only send error response if headers haven't been sent yet
+        if (!res.headersSent) {
+        res.status(500).json({
             status: 'error',
-            message: 'Layout not found'
+            message: 'Failed to generate layout',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
         }
-        res.json({
-        status: 'success',
-        data: layout
-        });
-    } catch (error) {
-        next(error);
     }
+    };
+
+        exports.getLayout = async (req, res, next) => {
+        try {
+            const layout = await Layout.findById(req.params.id);
+            if (!layout) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Layout not found'
+            });
+            }
+            res.json({
+            status: 'success',
+            data: layout
+            });
+        } catch (error) {
+            console.error("Download failed:", error);
+        }
+        
     };
