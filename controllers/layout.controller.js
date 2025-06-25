@@ -6,7 +6,7 @@
     try {
         // Validate input
         if (!req.body.elements || !Array.isArray(req.body.elements)) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             status: 'error',
             message: 'Elements array is required'
         });
@@ -83,3 +83,26 @@
         }
     }
     };
+
+    exports.getLayout = async (req, res) => {
+  try {
+    const layout = await Layout.findById(req.params.id);
+    if (!layout) {
+      return res.status(404).json({ 
+        status: 'error',
+        message: 'Layout not found' 
+      });
+    }
+    res.json({
+      status: 'success',
+      data: layout
+    });
+  } catch (error) {
+    console.error("Error fetching layout:", error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch layout',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
