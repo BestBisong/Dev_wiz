@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const layoutController = require('../controllers/layout.controller');
 
-// Create and download layout
-router.post('/create', layoutController.createLayout);
 
-// Get layout by ID
+router.post('/', layoutController.createLayout);
+
+
 router.get('/:id', layoutController.getLayout);
 
 module.exports = router;
