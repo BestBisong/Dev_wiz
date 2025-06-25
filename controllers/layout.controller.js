@@ -1,34 +1,37 @@
-const Layout = require('../models/layout.model');
-const { generateHTML, wrapWithHTMLPage } = require('../utils/htmlGenerator');
+const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
+const archiver = require('archiver');
 
-exports.createLayout = async (req, res) => {
+exports.createAndDownloadLayout = async (req, res) => {
     try {
-        const { elements } = req.body;
-
-        if ( !elements) {
-            return res.status(400).json({ message: " elements are required" });
+        // Validate input
+        if (!req.body || !req.body.elements) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Elements data is required" 
+            });
         }
 
-        // Generate HTML from the dropped items structure
-        const bodyHTML = generateHTML(elements);
-        const fullHTML = wrapWithHTMLPage(bodyHTML);
+        const { name = "my_layout", elements } = req.body;
 
-        // Save to database (optional)
-        const newLayout = new Layout({
-            name,
-            layoutJSON: elements,
-            generatedHTML: fullHTML
-        });
-        await newLayout.save();
+        // Generate HTML and CSS
+        const { html, css } = generateHTMLAndCSS(elements);
 
-        // Set headers for immediate download
-        res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/[^a-z0-9]/gi, '_')}.html"`);
-        res.setHeader('Content-Type', 'text/html');
+        // Create zip archive
+        const archive = archiver('zip');
+        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+
+        archive.pipe(res);
+        archive.append(html, { name: 'index.html' });
+        archive.append(css, { name: 'styles.css' });
         
-        // Send the HTML for download
-        res.send(fullHTML);
+        await archive.finalize();
+
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server error" });
+        console.error("Download failed:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to generate download",
+            error: error.message
+        });
     }
 };

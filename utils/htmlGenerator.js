@@ -1,98 +1,134 @@
-function generateHTML(elements) {
-    if (!Array.isArray(elements)) return '';
+function generateHTMLAndCSS(elements) {
+    if (!Array.isArray(elements)) {
+        throw new Error("Elements must be an array");
+    }
 
-    return elements.map(element => {
-        const { label, styles = {}, position = {}, imagePreview, customText } = element;
+    // Generate CSS classes for each element
+    const cssRules = [];
+    const htmlElements = [];
+
+    elements.forEach((element, index) => {
+        const { label = 'div', styles = {}, position = {}, imagePreview, customText } = element;
+        const elementId = `element-${index}`;
+        const className = `element-${label.toLowerCase()}-${index}`;
+
+        // Create CSS rule for this element
+        let cssRule = `.${className} {\n`;
         
-        // Convert styles object to CSS string
-        let styleString = Object.entries(styles)
-            .map(([key, value]) => {
-                // Convert camelCase to kebab-case
+        // Add position styles
+        cssRule += `  position: absolute;\n`;
+        cssRule += `  left: ${position.x || 0}px;\n`;
+        cssRule += `  top: ${position.y || 0}px;\n`;
+
+        // Add other styles
+        Object.entries(styles).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
                 const cssProperty = key.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
-                return `${cssProperty}:${value}`;
-            })
-            .join(';');
+                cssRule += `  ${cssProperty}: ${value};\n`;
+            }
+        });
 
-        // Add positioning if exists
-        if (position.x || position.y) {
-            styleString += `;position:absolute;left:${position.x}px;top:${position.y}px`;
-        }
+        cssRule += `}\n\n`;
+        cssRules.push(cssRule);
 
-        // Handle different element types
-        const content = customText || '';
-        
+        // Create HTML element
+        let htmlElement = `<div class="${className}" id="${elementId}">`;
+
         switch (label) {
             case 'Header':
-                return `<h1 style="${styleString}">${content || 'Header'}</h1>`;
+                htmlElement += `<h1>${customText || 'Header'}</h1>`;
+                break;
             case 'Text':
-                return `<p style="${styleString}">${content || 'Sample Text'}</p>`;
+                htmlElement += `<p>${customText || 'Sample Text'}</p>`;
+                break;
             case 'List':
-                return `<ul style="${styleString}">
-                    <li>Item 1</li>
-                    <li>Item 2</li>
-                    <li>Item 3</li>
-                </ul>`;
+                htmlElement += `<ul><li>Item 1</li><li>Item 2</li><li>Item 3</li></ul>`;
+                break;
             case 'Navbar':
-                return `<nav style="${styleString}">
-                    <a href="#">Home</a>
-                    <a href="#">About</a>
-                    <a href="#">Contact</a>
-                </nav>`;
+                htmlElement += `<nav><a href="#">Home</a><a href="#">About</a><a href="#">Contact</a></nav>`;
+                break;
             case 'Card':
-                return `<div style="${styleString}">
-                    <div class="card">
-                        <h3>Card Title</h3>
-                        <p>${content || 'Card content...'}</p>
-                    </div>
-                </div>`;
+                htmlElement += `<div class="card"><h3>Card Title</h3><p>${customText || 'Card content...'}</p></div>`;
+                break;
             case 'Form':
-                return `<form style="${styleString}">
-                    <input type="text" placeholder="Name">
-                    <input type="email" placeholder="Email">
-                    <button type="submit">Submit</button>
-                </form>`;
+                htmlElement += `<form><input type="text" placeholder="Name"><input type="email" placeholder="Email"><button type="submit">Submit</button></form>`;
+                break;
             case 'Grid':
-                return `<div style="${styleString}">
-                    <div class="grid">
-                        <div>Item 1</div>
-                        <div>Item 2</div>
-                        <div>Item 3</div>
-                    </div>
-                </div>`;
+                htmlElement += `<div class="grid"><div>Item 1</div><div>Item 2</div><div>Item 3</div></div>`;
+                break;
             case 'Button':
-                return `<button style="${styleString}">${content || 'Button'}</button>`;
+                htmlElement += `<button>${customText || 'Button'}</button>`;
+                break;
             case 'Image':
-                return imagePreview 
-                    ? `<img style="${styleString}" src="${imagePreview}" alt="Uploaded content">`
-                    : `<div style="${styleString}">Image Placeholder</div>`;
+                htmlElement += imagePreview 
+                    ? `<img src="${imagePreview}" alt="User uploaded content">`
+                    : `<div class="image-placeholder">Image Placeholder</div>`;
+                break;
             case 'Footer':
-                return `<footer style="${styleString}">
-                    <p>© ${new Date().getFullYear()} My Website</p>
-                </footer>`;
+                htmlElement += `<footer><p>© ${new Date().getFullYear()} My Website</p></footer>`;
+                break;
             default:
-                return `<div style="${styleString}">${content || label}</div>`;
+                htmlElement += `${customText || label}`;
         }
-    }).join('\n');
-}
 
-function wrapWithHTMLPage(bodyHTML) {
-    return `<!DOCTYPE html>
+        htmlElement += `</div>`;
+        htmlElements.push(htmlElement);
+    });
+
+    // Combine all CSS rules
+    const css = `/* Generated CSS */\n${cssRules.join('\n')}\n\n/* Base Styles */\n
+.card { 
+    border: 1px solid #ddd; 
+    padding: 15px; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.grid { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 15px; 
+}
+nav a { 
+    margin-right: 20px; 
+    text-decoration: none;
+    color: #333;
+}
+button {
+    padding: 8px 16px;
+    background: #1e31e3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+img {
+    max-width: 100%;
+    height: auto;
+}
+.image-placeholder {
+    width: 200px;
+    height: 200px;
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}`;
+
+    // Create full HTML document
+    const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generated Layout</title>
-    <style>
-        body { margin: 0; padding: 0; min-height: 100vh; position: relative; }
-        .card { border: 1px solid #ccc; padding: 10px; border-radius: 8px; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-        nav a { margin-right: 20px; text-decoration: none; }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    ${bodyHTML}
+    ${htmlElements.join('\n')}
 </body>
 </html>`;
+
+    return { html, css };
 }
 
-module.exports = { generateHTML, wrapWithHTMLPage };
+module.exports = { generateHTMLAndCSS };
