@@ -3,6 +3,6 @@ const router = express.Router();
 const layoutController = require('../controllers/layout.controller');
 
 router.post('/create', layoutController.createLayout);
-router.get('/:id', layoutController.getLayout);
+router.get('/get', layoutController.getLayout);
 
 module.exports = router;
