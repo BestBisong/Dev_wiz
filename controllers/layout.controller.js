@@ -3,10 +3,10 @@ const { generateHTML, wrapWithHTMLPage } = require('../utils/htmlGenerator');
 
 exports.createLayout = async (req, res) => {
     try {
-        const { name, elements } = req.body;
+        const { elements } = req.body;
 
-        if (!name || !elements) {
-            return res.status(400).json({ message: "Name and elements are required" });
+        if ( !elements) {
+            return res.status(400).json({ message: " elements are required" });
         }
 
         // Generate HTML from the dropped items structure
