@@ -1,7 +1,3 @@
-    const archiver = require('archiver');
-    const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
-    const Layout = require('../models/layout.model');
-
     exports.createLayout = async (req, res) => {
     try {
         // Validate input
@@ -17,9 +13,22 @@
         // Generate HTML and CSS
         const { html, css } = generateHTMLAndCSS(elements);
         
+        // Validate generated content
+        if (!html || !css) {
+        throw new Error('Generated HTML or CSS is empty');
+        }
+
+        // First save to database
+        const savedLayout = await Layout.create({
+        name,
+        layoutJSON: elements,
+        generatedHTML: html,
+        generatedCSS: css
+        });
+
         // Create archive
         const archive = archiver('zip', {
-        zlib: { level: 9 } // Maximum compression
+        zlib: { level: 9 }
         });
 
         // Set response headers
@@ -35,21 +44,32 @@
         archive.append(html, { name: 'index.html' });
         archive.append(css, { name: 'styles.css' });
 
-        // Optional: Save to database
-        await Layout.create({
-        name,
-        layoutJSON: elements,
-        generatedHTML: html,
-        generatedCSS: css
+        // Event handlers
+        archive.on('warning', (err) => {
+        if (err.code === 'ENOENT') {
+            console.warn('Archive warning:', err);
+        } else {
+            throw err;
+        }
         });
 
-        // Finalize the archive (this will send the response)
-        await archive.finalize();
+        archive.on('error', (err) => {
+        throw err;
+        });
+
+        res.on('close', () => {
+        console.log('Archive wrote %d bytes', archive.pointer());
+        });
+
+        // Finalize and wait for completion
+        await new Promise((resolve, reject) => {
+        archive.on('end', resolve);
+        archive.on('error', reject);
+        archive.finalize();
+        });
 
     } catch (error) {
         console.error('Error generating layout:', error);
-        
-        // Only send error response if headers haven't been sent yet
         if (!res.headersSent) {
         res.status(500).json({
             status: 'error',
@@ -58,23 +78,4 @@
         });
         }
     }
-    };
-
-        exports.getLayout = async (req, res, next) => {
-        try {
-            const layout = await Layout.findById(req.params.id);
-            if (!layout) {
-            return res.status(404).json({
-                status: 'error',
-                message: 'Layout not found'
-            });
-            }
-            res.json({
-            status: 'success',
-            data: layout
-            });
-        } catch (error) {
-            console.error("Download failed:", error);
-        }
-        
     };
