@@ -9,6 +9,10 @@
         credentials:true
         }));
 
+    app.use(express.json({ limit: '100mb' })); // or even higher
+
+    app.use(express.json());
+
 
     // Initialize database connection
     connectDB().catch(err => {
@@ -16,7 +20,6 @@
 
     });
 
-    app.use(express.json());
 
 
     app.use('/layouts', require('./routes/layout.routes'));
