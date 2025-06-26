@@ -9,7 +9,7 @@
         credentials:true
         }));
 
-    app.use(express.json({ limit: '100mb' })); // or even higher
+    app.use(express.json({ limit: '1GB' })); 
 
 
 
