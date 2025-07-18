@@ -3,87 +3,54 @@ function generateHTMLAndCSS(elements) {
         throw new Error('Elements must be an array');
     }
 
-    const cssRules = [];
-    const viewportWidth = 1440; // Your editor's base width for responsive calculations
+    // 1. Get the exact dimensions of your editor's canvas
+    const editorWidth = 1440; // Match your editor's width
+    const editorHeight = 900; // Match your editor's height
 
+    // 2. Base styles that match your editor exactly
     const baseStyles = `
-    /* Base Reset */
-    * {
-        box-sizing: border-box;
+    /* Exact Editor Styles */
+    html, body {
+        width: 100%;
+        height: 100%;
         margin: 0;
         padding: 0;
-    }
-
-    /* Responsive Base */
-    html {
-        font-size: 16px;
-    }
-
-    body {
         font-family: 'Open Sans', Arial, sans-serif;
-        line-height: 1.5;
-        width: 100%;
-        min-height: 100vh;
-        position: relative;
-        margin: 0;
-        padding: 0;
-        overflow-x: hidden;
     }
-
-    /* Canvas Container - Matches your editor */
-    .canvas-container {
+    
+    /* Canvas that matches your editor */
+    .editor-canvas {
         position: relative;
-        width: 100%;
-        min-height: 100vh;
+        width: ${editorWidth}px;
+        min-height: ${editorHeight}px;
         margin: 0 auto;
         background-color: #f0f0f0;
+        overflow: visible;
     }
 
-    /* Responsive Scaling */
-    @media (max-width: ${viewportWidth}px) {
-        html {
-            font-size: calc(16 * (100vw / ${viewportWidth}));
+    /* Print-specific styles */
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+        .editor-canvas, .editor-canvas * {
+            visibility: visible;
+        }
+        .editor-canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
         }
     }
     `;
 
-    // Convert React styles to proper CSS with units
-    function convertStyles(styles) {
-        const css = {};
-        if (!styles) return css;
-
-        const unitProperties = [
-            'width', 'height', 'fontSize', 
-            'borderRadius', 'padding', 'margin',
-            'borderWidth', 'lineHeight', 'letterSpacing'
-        ];
-
-        for (const [key, value] of Object.entries(styles)) {
-            if (value === undefined || value === null) continue;
-
-            // Convert camelCase to kebab-case
-            const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-
-            // Add units to numeric values
-            if (typeof value === 'number' && unitProperties.includes(key)) {
-                css[cssKey] = `${value}px`;
-            } 
-            // Handle special cases
-            else if (key === 'fontFamily') {
-                css[cssKey] = `"${value.replace(/"/g, '')}", Arial, sans-serif`;
-            }
-            else {
-                css[cssKey] = value;
-            }
-        }
-
-        return css;
-    }
-
-    function processElement(element) {
+    // 3. Process each element with pixel-perfect precision
+    const elementHTML = elements.map(element => {
         const {
             id,
-            label = 'div',
+            label,
             styles = {},
             position = { x: 0, y: 0 },
             content = '',
@@ -91,95 +58,79 @@ function generateHTMLAndCSS(elements) {
             imageUrl = null
         } = element;
 
-        const className = `element-${id}`;
-        const elementContent = content || customText || '';
-        const finalStyles = convertStyles(styles);
+        // Convert React styles to CSS with units
+        const styleString = Object.entries(styles)
+            .map(([key, value]) => {
+                const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                
+                // Add px to numeric values (except line-height, opacity, z-index)
+                if (typeof value === 'number' && !['zIndex', 'opacity', 'lineHeight', 'flex'].includes(key)) {
+                    return `${cssKey}: ${value}px`;
+                }
+                return `${cssKey}: ${value}`;
+            })
+            .join('; ');
 
-        // Generate CSS with responsive positioning
-        let cssRule = `.${className} {\n`;
-        cssRule += `  position: absolute;\n`;
-        
-        // Convert position to percentage for responsiveness
-        cssRule += `  left: ${(position.x / viewportWidth) * 100}%;\n`;
-        cssRule += `  top: ${position.y}px;\n`;
-        cssRule += `  transform: translateX(-50%);\n`; // Center horizontally
+        // Position with pixel-perfect accuracy
+        const positionStyle = `position: absolute; left: ${position.x}px; top: ${position.y}px;`;
 
-        // Add all converted styles
-        for (const [prop, value] of Object.entries(finalStyles)) {
-            cssRule += `  ${prop}: ${value};\n`;
+        // Component-specific HTML
+        let innerHTML = content || customText || '';
+        if (label === 'Image' && imageUrl) {
+            innerHTML = `<img src="${imageUrl}" style="width:100%;height:100%;object-fit:cover;" 
+                          onerror="this.style.display='none'">`;
+        } else if (label === 'Button') {
+            innerHTML = `<button style="${styleString}">${innerHTML || 'Button'}</button>`;
+        } else if (label === 'Header') {
+            innerHTML = `<h1 style="${styleString}">${innerHTML || 'Header'}</h1>`;
         }
 
-        cssRule += `}\n`;
+        return `<div id="element-${id}" 
+                    class="editor-element" 
+                    style="${positionStyle} ${styleString}">
+                ${innerHTML}
+            </div>`;
+    }).join('\n');
 
-        // Media queries for different screen sizes
-        cssRule += `@media (max-width: 768px) {
-            .${className} {
-                left: 50% !important;
-                transform: translateX(-50%) !important;
-                ${finalStyles.width ? `width: 90% !important;` : ''}
-            }
-        }`;
-
-        cssRules.push(cssRule);
-
-        // Generate HTML based on component type
-        switch (label.toLowerCase()) {
-            case 'image':
-                return `<div class="${className} drag-item">
-                    ${imageUrl 
-                        ? `<img src="${imageUrl}" alt="Content" style="width:100%;height:100%;object-fit:cover;">`
-                        : '<div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;">Image</div>'}
-                </div>`;
-
-            case 'header':
-                return `<header class="${className} drag-item">
-                    <h1 style="${finalStyles.fontFamily ? `font-family:${finalStyles.fontFamily}` : ''}">
-                        ${elementContent || 'Header'}
-                    </h1>
-                </header>`;
-
-            case 'text':
-                return `<div class="${className} drag-item">
-                    <p>${elementContent || 'Text content'}</p>
-                </div>`;
-
-            case 'button':
-                return `<div class="${className} drag-item">
-                    <button style="
-                        ${finalStyles.backgroundColor ? `background:${finalStyles.backgroundColor};` : ''}
-                        ${finalStyles.color ? `color:${finalStyles.color};` : ''}
-                        padding: 8px 16px;
-                        border: none;
-                        cursor: pointer;
-                    ">
-                        ${elementContent || 'Button'}
-                    </button>
-                </div>`;
-
-            // Add more component cases as needed
-            default:
-                return `<div class="${className} drag-item">
-                    ${elementContent || label}
-                </div>`;
-        }
-    }
-
+    // 4. Generate the final HTML document
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Designed Page</title>
+    <title>Your Exact Design</title>
     <style>
         ${baseStyles}
-        ${cssRules.join('\n')}
+        
+        /* Include all Google Fonts used in your editor */
+        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap');
+        
+        /* Element base styles */
+        .editor-element {
+            box-sizing: border-box;
+            min-width: 20px;
+            min-height: 20px;
+        }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="canvas-container">
-        ${elements.map(el => processElement(el)).join('\n')}
+    <div class="editor-canvas">
+        ${elementHTML}
     </div>
+    
+    <script>
+        // Optional: Add script to maintain exact sizing
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.querySelector('.editor-canvas');
+            const scale = Math.min(
+                window.innerWidth / ${editorWidth},
+                window.innerHeight / ${editorHeight}
+            );
+            
+            canvas.style.transform = 'scale(' + scale + ')';
+            canvas.style.transformOrigin = 'top left';
+        });
+    </script>
 </body>
 </html>`;
 
