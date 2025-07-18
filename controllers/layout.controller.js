@@ -1,5 +1,6 @@
 const archiver = require('archiver');
 const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
+const Layout = require('../models/layout.model');
 
 exports.createLayout = async (req, res) => {
     try {
@@ -14,23 +15,55 @@ exports.createLayout = async (req, res) => {
         
         // Process elements to ensure image URLs are absolute
         const processedElements = elements.map(element => {
-            if (element.label === 'Image' && element.imageUrl && !element.imageUrl.startsWith('http')) {
-                return {
-                    ...element,
-                    imageUrl: `${req.protocol}://${req.get('host')}${element.imageUrl}`
-                };
+            if (element.type === 'image' && element.imageUrl) {
+                // Handle both relative and absolute URLs
+                if (!element.imageUrl.startsWith('http') && !element.imageUrl.startsWith('/')) {
+                    return {
+                        ...element,
+                        imageUrl: `${req.protocol}://${req.get('host')}/images/${element.imageUrl}`
+                    };
+                }
+                if (element.imageUrl.startsWith('/') && !element.imageUrl.startsWith('//')) {
+                    return {
+                        ...element,
+                        imageUrl: `${req.protocol}://${req.get('host')}${element.imageUrl}`
+                    };
+                }
             }
             return element;
         });
 
-        const { html, css } = generateHTMLAndCSS(processedElements);
-        
+        // Generate HTML and CSS with proper error handling
+        let html, css;
+        try {
+            const result = generateHTMLAndCSS(processedElements);
+            html = result.html;
+            css = result.css;
+        } catch (error) {
+            console.error('HTML/CSS generation error:', error);
+            return res.status(500).json({
+                status: 'error',
+                message: 'Failed to generate HTML/CSS'
+            });
+        }
+
         // Create archive
         const archive = archiver('zip', {
-            zlib: { level: 9 } // Maximum compression
+            zlib: { level: 9 }
         });
 
-        // Handle archive errors
+        // Set response headers before piping
+        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+        
+        // Handle archive events
+        archive.on('warning', (err) => {
+            if (err.code === 'ENOENT') {
+                console.warn('Archive warning:', err);
+            } else {
+                throw err;
+            }
+        });
+
         archive.on('error', (err) => {
             console.error('Archive error:', err);
             if (!res.headersSent) {
@@ -40,10 +73,6 @@ exports.createLayout = async (req, res) => {
                 });
             }
         });
-
-        // Set response headers before piping
-        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
-        res.setHeader('Content-Type', 'application/zip');
 
         // Pipe archive to response
         archive.pipe(res);

@@ -4,8 +4,6 @@ function generateHTMLAndCSS(elements) {
     }
 
     const cssRules = [];
-    const ids = [];
-
     const baseStyles = `
     /* Base Styles */
     * {
@@ -15,7 +13,7 @@ function generateHTMLAndCSS(elements) {
     }
     
     body {
-        font-family: 'Open-sans', Arial, sans-serif;
+        font-family: 'Open Sans', Arial, sans-serif;
         line-height: 1.5;
         min-height: 100vh;
         background-color: #f0f0f0;
@@ -50,18 +48,22 @@ function generateHTMLAndCSS(elements) {
     }
 
     .drag-image img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
     }
 
-    /* Add other component styles as needed */
+    /* Text element styles */
+    .drag-text {
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
     `;
 
     function processElement(element) {
         const {
             id,
-            label = 'div',
+            type = 'div',
             styles = {},
             position = { x: 0, y: 0 },
             content = '',
@@ -76,30 +78,49 @@ function generateHTMLAndCSS(elements) {
         cssRule += `  left: ${position.x}px;\n`;
         cssRule += `  top: ${position.y}px;\n`;
         
-        // Convert React style props to CSS
-        const styleMap = {
-            color: styles.color || '#000000',
-            fontSize: styles.fontSize ? `${styles.fontSize}px` : '16px',
-            fontWeight: styles.fontWeight || '400',
-            fontFamily: styles.fontFamily || 'Open-sans, Arial, sans-serif',
-            textAlign: styles.textAlign || 'left',
-            backgroundColor: styles.backgroundColor || 'transparent',
-            width: styles.width ? `${styles.width}px` : '200px',
-            height: styles.height ? `${styles.height}px` : '200px',
-            border: styles.border || 'none'
-        };
-
-        Object.entries(styleMap).forEach(([key, value]) => {
-            if (value) {
-                cssRule += `  ${key}: ${value};\n`;
-            }
-        });
+        // Convert all style properties to CSS
+        if (styles) {
+            Object.entries(styles).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    // Handle different style properties
+                    switch (key) {
+                        case 'fontSize':
+                            cssRule += `  font-size: ${value}px;\n`;
+                            break;
+                        case 'width':
+                            cssRule += `  width: ${value}px;\n`;
+                            break;
+                        case 'height':
+                            cssRule += `  height: ${value}px;\n`;
+                            break;
+                        case 'color':
+                        case 'backgroundColor':
+                        case 'fontWeight':
+                        case 'fontFamily':
+                        case 'textAlign':
+                        case 'border':
+                        case 'borderRadius':
+                        case 'padding':
+                        case 'margin':
+                            cssRule += `  ${key}: ${value};\n`;
+                            break;
+                        case 'zIndex':
+                            cssRule += `  z-index: ${value};\n`;
+                            break;
+                        case 'opacity':
+                            cssRule += `  opacity: ${value};\n`;
+                            break;
+                        // Add more cases as needed
+                    }
+                }
+            });
+        }
 
         cssRule += `}`;
         cssRules.push(cssRule);
 
         // Generate HTML
-        switch (label.toLowerCase()) {
+        switch (type.toLowerCase()) {
             case 'image':
                 if (!imageUrl) {
                     return `<div class="${className} drag-item drag-image">
@@ -109,10 +130,10 @@ function generateHTMLAndCSS(elements) {
                 return `<div class="${className} drag-item drag-image">
                     <img src="${imageUrl}" 
                          alt="User content" 
-                         style="width:100%;height:100%;object-fit:cover;"
-                         onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML+='<span>Image failed to load</span>'">
+                         onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML='<span>Image failed to load</span>'">
                 </div>`;
-            // Add other cases as needed
+            case 'text':
+                return `<div class="${className} drag-item drag-text">${content}</div>`;
             default:
                 return `<div class="${className} drag-item">${content}</div>`;
         }
@@ -136,7 +157,10 @@ function generateHTMLAndCSS(elements) {
 </body>
 </html>`;
 
-    return { html, css: `${baseStyles}\n${cssRules.join('\n')}` };
+    return { 
+        html, 
+        css: `${baseStyles}\n${cssRules.join('\n')}` 
+    };
 }
 
 module.exports = { generateHTMLAndCSS };
