@@ -3,164 +3,138 @@ function generateHTMLAndCSS(elements) {
         throw new Error('Elements must be an array');
     }
 
-    const cssRules = [];
+    // 1. Get the exact dimensions of your editor's canvas
+    const editorWidth = 1440; // Match your editor's width
+    const editorHeight = 900; // Match your editor's height
+
+    // 2. Base styles that match your editor exactly
     const baseStyles = `
-    /* Base Styles */
-    * {
-        box-sizing: border-box;
+    /* Exact Editor Styles */
+    html, body {
+        width: 100%;
+        height: 100%;
         margin: 0;
         padding: 0;
+        font-family: 'Open Sans', Arial, sans-serif;
     }
     
-    body {
-        font-family: 'Open Sans', Arial, sans-serif;
-        line-height: 1.5;
-        min-height: 100vh;
-        background-color: #f0f0f0;
-        margin: 0;
-        padding: 0;
-    }
-
-    .canvas-container {
+    /* Canvas that matches your editor */
+    .editor-canvas {
         position: relative;
-        width: 100%;
-        min-height: 100vh;
+        width: ${editorWidth}px;
+        min-height: ${editorHeight}px;
         margin: 0 auto;
-        overflow: auto;
-    }
-
-    /* Element base styles */
-    .drag-item {
-        position: absolute;
-        padding: 8px;
-        min-width: 50px;
-        min-height: 30px;
-        user-select: none;
-    }
-
-    /* Image specific styles */
-    .drag-image {
         background-color: #f0f0f0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
+        overflow: visible;
     }
 
-    .drag-image img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-    }
-
-    /* Text element styles */
-    .drag-text {
-        word-wrap: break-word;
-        white-space: pre-wrap;
+    /* Print-specific styles */
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+        .editor-canvas, .editor-canvas * {
+            visibility: visible;
+        }
+        .editor-canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: auto;
+        }
     }
     `;
 
-    function processElement(element) {
+    // 3. Process each element with pixel-perfect precision
+    const elementHTML = elements.map(element => {
         const {
             id,
-            type = 'div',
+            label,
             styles = {},
             position = { x: 0, y: 0 },
             content = '',
+            customText = '',
             imageUrl = null
         } = element;
 
-        const className = `element-${id}`;
-
-        // Generate CSS
-        let cssRule = `.${className} {\n`;
-        cssRule += `  position: absolute;\n`;
-        cssRule += `  left: ${position.x}px;\n`;
-        cssRule += `  top: ${position.y}px;\n`;
-        
-        // Convert all style properties to CSS
-        if (styles) {
-            Object.entries(styles).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    // Handle different style properties
-                    switch (key) {
-                        case 'fontSize':
-                            cssRule += `  font-size: ${value}px;\n`;
-                            break;
-                        case 'width':
-                            cssRule += `  width: ${value}px;\n`;
-                            break;
-                        case 'height':
-                            cssRule += `  height: ${value}px;\n`;
-                            break;
-                        case 'color':
-                        case 'backgroundColor':
-                        case 'fontWeight':
-                        case 'fontFamily':
-                        case 'textAlign':
-                        case 'border':
-                        case 'borderRadius':
-                        case 'padding':
-                        case 'margin':
-                            cssRule += `  ${key}: ${value};\n`;
-                            break;
-                        case 'zIndex':
-                            cssRule += `  z-index: ${value};\n`;
-                            break;
-                        case 'opacity':
-                            cssRule += `  opacity: ${value};\n`;
-                            break;
-                        // Add more cases as needed
-                    }
+        // Convert React styles to CSS with units
+        const styleString = Object.entries(styles)
+            .map(([key, value]) => {
+                const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                
+                // Add px to numeric values (except line-height, opacity, z-index)
+                if (typeof value === 'number' && !['zIndex', 'opacity', 'lineHeight', 'flex'].includes(key)) {
+                    return `${cssKey}: ${value}px`;
                 }
-            });
+                return `${cssKey}: ${value}`;
+            })
+            .join('; ');
+
+        // Position with pixel-perfect accuracy
+        const positionStyle = `position: absolute; left: ${position.x}px; top: ${position.y}px;`;
+
+        // Component-specific HTML
+        let innerHTML = content || customText || '';
+        if (label === 'Image' && imageUrl) {
+            innerHTML = `<img src="${imageUrl}" style="width:100%;height:100%;object-fit:cover;" 
+                          onerror="this.style.display='none'">`;
+        } else if (label === 'Button') {
+            innerHTML = `<button style="${styleString}">${innerHTML || 'Button'}</button>`;
+        } else if (label === 'Header') {
+            innerHTML = `<h1 style="${styleString}">${innerHTML || 'Header'}</h1>`;
         }
 
-        cssRule += `}`;
-        cssRules.push(cssRule);
+        return `<div id="element-${id}" 
+                    class="editor-element" 
+                    style="${positionStyle} ${styleString}">
+                ${innerHTML}
+            </div>`;
+    }).join('\n');
 
-        // Generate HTML
-        switch (type.toLowerCase()) {
-            case 'image':
-                if (!imageUrl) {
-                    return `<div class="${className} drag-item drag-image">
-                        <span>Image missing</span>
-                    </div>`;
-                }
-                return `<div class="${className} drag-item drag-image">
-                    <img src="${imageUrl}" 
-                         alt="User content" 
-                         onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML='<span>Image failed to load</span>'">
-                </div>`;
-            case 'text':
-                return `<div class="${className} drag-item drag-text">${content}</div>`;
-            default:
-                return `<div class="${className} drag-item">${content}</div>`;
-        }
-    }
-
+    // 4. Generate the final HTML document
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generated Layout</title>
+    <title>Your Exact Design</title>
     <style>
         ${baseStyles}
-        ${cssRules.join('\n')}
+        
+        /* Include all Google Fonts used in your editor */
+        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap');
+        
+        /* Element base styles */
+        .editor-element {
+            box-sizing: border-box;
+            min-width: 20px;
+            min-height: 20px;
+        }
     </style>
 </head>
 <body>
-    <div class="canvas-container">
-        ${elements.map(el => processElement(el)).join('\n')}
+    <div class="editor-canvas">
+        ${elementHTML}
     </div>
+    
+    <script>
+        // Optional: Add script to maintain exact sizing
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.querySelector('.editor-canvas');
+            const scale = Math.min(
+                window.innerWidth / ${editorWidth},
+                window.innerHeight / ${editorHeight}
+            );
+            
+            canvas.style.transform = 'scale(' + scale + ')';
+            canvas.style.transformOrigin = 'top left';
+        });
+    </script>
 </body>
 </html>`;
 
-    return { 
-        html, 
-        css: `${baseStyles}\n${cssRules.join('\n')}` 
-    };
+    return { html };
 }
 
 module.exports = { generateHTMLAndCSS };
