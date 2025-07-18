@@ -41,7 +41,7 @@ exports.createLayout = async (req, res) => {
             }
         });
 
-        // Set response headers before piping
+        // Set response headers
         res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
         res.setHeader('Content-Type', 'application/zip');
 
@@ -52,8 +52,8 @@ exports.createLayout = async (req, res) => {
         archive.append(html, { name: 'index.html' });
         archive.append(css, { name: 'styles.css' });
 
-        // Finalize the archive
-        await archive.finalize();
+        // Finalize the archive (no need to await as it's event-based)
+        archive.finalize();
 
     } catch (error) {
         console.error('Error generating layout:', error);
