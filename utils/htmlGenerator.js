@@ -3,23 +3,27 @@ function generateHTMLAndCSS(elements) {
         throw new Error('Elements must be an array');
     }
 
-    // 1. Get the exact dimensions of your editor's canvas
-    const editorWidth = 1440; // Match your editor's width
-    const editorHeight = 900; // Match your editor's height
+    // Canvas dimensions
+    const editorWidth = 1440;
+    const editorHeight = 900;
 
-    // 2. Base styles that match your editor exactly
+    // Base CSS styles
     const baseStyles = `
-    /* Exact Editor Styles */
-    html, body {
-        width: 100%;
-        height: 100%;
+    /* Reset & Base Styles */
+    * {
+        box-sizing: border-box;
         margin: 0;
         padding: 0;
-        font-family: 'Open Sans', Arial, sans-serif;
     }
-    
-    /* Canvas that matches your editor */
-    .editor-canvas {
+
+    body, html {
+        width: 100%;
+        height: 100%;
+        font-family: 'Open Sans', Arial, sans-serif;
+        background-color: #f0f0f0;
+    }
+
+    .canvas-container {
         position: relative;
         width: ${editorWidth}px;
         min-height: ${editorHeight}px;
@@ -28,15 +32,30 @@ function generateHTMLAndCSS(elements) {
         overflow: visible;
     }
 
-    /* Print-specific styles */
+    .canvas-element {
+        position: absolute;
+        user-select: none;
+    }
+
+    .drag-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .drag-text {
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
+
     @media print {
         body * {
             visibility: hidden;
         }
-        .editor-canvas, .editor-canvas * {
+        .canvas-container, .canvas-container * {
             visibility: visible;
         }
-        .editor-canvas {
+        .canvas-container {
             position: absolute;
             left: 0;
             top: 0;
@@ -46,11 +65,13 @@ function generateHTMLAndCSS(elements) {
     }
     `;
 
-    // 3. Process each element with pixel-perfect precision
-    const elementHTML = elements.map(element => {
+    const cssRules = [];
+
+    function processElement(element) {
         const {
             id,
             label,
+            type = 'div', // fallback type if label is missing
             styles = {},
             position = { x: 0, y: 0 },
             content = '',
@@ -58,75 +79,84 @@ function generateHTMLAndCSS(elements) {
             imageUrl = null
         } = element;
 
-        // Convert React styles to CSS with units
-        const styleString = Object.entries(styles)
-            .map(([key, value]) => {
+        const elementId = `element-${id}`;
+        const className = `canvas-element ${elementId}`;
+
+        // Generate CSS for the element
+        let cssRule = `.${elementId} {\n`;
+        cssRule += `  left: ${position.x}px;\n`;
+        cssRule += `  top: ${position.y}px;\n`;
+
+        Object.entries(styles).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
                 const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-                
-                // Add px to numeric values (except line-height, opacity, z-index)
-                if (typeof value === 'number' && !['zIndex', 'opacity', 'lineHeight', 'flex'].includes(key)) {
-                    return `${cssKey}: ${value}px`;
+
+                if (typeof value === 'number' && !['z-index', 'opacity', 'line-height', 'flex'].includes(key)) {
+                    cssRule += `  ${cssKey}: ${value}px;\n`;
+                } else {
+                    cssRule += `  ${cssKey}: ${value};\n`;
                 }
-                return `${cssKey}: ${value}`;
-            })
-            .join('; ');
+            }
+        });
 
-        // Position with pixel-perfect accuracy
-        const positionStyle = `position: absolute; left: ${position.x}px; top: ${position.y}px;`;
+        cssRule += `}\n`;
+        cssRules.push(cssRule);
 
-        // Component-specific HTML
+        // Determine HTML content
+        const actualLabel = label || type;
+
         let innerHTML = content || customText || '';
-        if (label === 'Image' && imageUrl) {
-            innerHTML = `<img src="${imageUrl}" style="width:100%;height:100%;object-fit:cover;" 
-                          onerror="this.style.display='none'">`;
-        } else if (label === 'Button') {
-            innerHTML = `<button style="${styleString}">${innerHTML || 'Button'}</button>`;
-        } else if (label === 'Header') {
-            innerHTML = `<h1 style="${styleString}">${innerHTML || 'Header'}</h1>`;
+
+        switch (actualLabel.toLowerCase()) {
+            case 'image':
+                if (!imageUrl) {
+                    return `<div class="${className} drag-image"><span>Image missing</span></div>`;
+                }
+                return `<div class="${className} drag-image">
+                    <img src="${imageUrl}" alt="User Image"
+                    onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML='<span>Image failed to load</span>'">
+                </div>`;
+            case 'button':
+                return `<div class="${className}">
+                    <button>${innerHTML || 'Button'}</button>
+                </div>`;
+            case 'header':
+                return `<div class="${className}">
+                    <h1>${innerHTML || 'Header'}</h1>
+                </div>`;
+            case 'text':
+                return `<div class="${className} drag-text">${innerHTML}</div>`;
+            default:
+                return `<div class="${className}">${innerHTML}</div>`;
         }
+    }
 
-        return `<div id="element-${id}" 
-                    class="editor-element" 
-                    style="${positionStyle} ${styleString}">
-                ${innerHTML}
-            </div>`;
-    }).join('\n');
+    const htmlContent = elements.map(processElement).join('\n');
 
-    // 4. Generate the final HTML document
-    const html = `<!DOCTYPE html>
+    const finalHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Exact Design</title>
+    <title>Generated Canvas</title>
     <style>
-        ${baseStyles}
-        
-        /* Include all Google Fonts used in your editor */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap');
-        
-        /* Element base styles */
-        .editor-element {
-            box-sizing: border-box;
-            min-width: 20px;
-            min-height: 20px;
-        }
+        ${baseStyles}
+        ${cssRules.join('\n')}
     </style>
 </head>
 <body>
-    <div class="editor-canvas">
-        ${elementHTML}
+    <div class="canvas-container">
+        ${htmlContent}
     </div>
-    
+
     <script>
-        // Optional: Add script to maintain exact sizing
         document.addEventListener('DOMContentLoaded', function() {
-            const canvas = document.querySelector('.editor-canvas');
+            const canvas = document.querySelector('.canvas-container');
             const scale = Math.min(
                 window.innerWidth / ${editorWidth},
                 window.innerHeight / ${editorHeight}
             );
-            
             canvas.style.transform = 'scale(' + scale + ')';
             canvas.style.transformOrigin = 'top left';
         });
@@ -134,7 +164,10 @@ function generateHTMLAndCSS(elements) {
 </body>
 </html>`;
 
-    return { html };
+    return {
+        html: finalHTML,
+        css: `${baseStyles}\n${cssRules.join('\n')}`
+    };
 }
 
 module.exports = { generateHTMLAndCSS };
