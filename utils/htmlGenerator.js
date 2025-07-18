@@ -4,119 +4,77 @@ function generateHTMLAndCSS(elements) {
     }
 
     const cssRules = [];
-    const ids = [];
+    const viewportWidth = 1440; // Your editor's base width for responsive calculations
 
     const baseStyles = `
-    /* Base Styles */
+    /* Base Reset */
     * {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
     }
-    
+
+    /* Responsive Base */
+    html {
+        font-size: 16px;
+    }
+
     body {
         font-family: 'Open Sans', Arial, sans-serif;
         line-height: 1.5;
+        width: 100%;
         min-height: 100vh;
-        background-color: #f0f0f0;
+        position: relative;
         margin: 0;
         padding: 0;
+        overflow-x: hidden;
     }
 
+    /* Canvas Container - Matches your editor */
     .canvas-container {
         position: relative;
         width: 100%;
         min-height: 100vh;
         margin: 0 auto;
-        overflow: auto;
-    }
-
-    /* Element base styles */
-    .drag-item {
-        position: absolute;
-        padding: 8px;
-        min-width: 50px;
-        min-height: 30px;
-        user-select: none;
-    }
-
-    /* Component-specific base styles */
-    .drag-image {
         background-color: #f0f0f0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-        cursor: pointer;
     }
 
-    .dragnav {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0 20px;
-    }
-
-    .dragnav ul {
-        display: flex;
-        list-style: none;
-        gap: 20px;
-    }
-
-    .drag-footer {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 20px;
-        padding: 40px;
-    }
-
-    .drag-footer ul {
-        list-style: none;
-    }
-
-    .drag-card {
-        padding: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .drag-button {
-        padding: 10px 20px;
-        border: none;
-        cursor: pointer;
+    /* Responsive Scaling */
+    @media (max-width: ${viewportWidth}px) {
+        html {
+            font-size: calc(16 * (100vw / ${viewportWidth}));
+        }
     }
     `;
 
+    // Convert React styles to proper CSS with units
     function convertStyles(styles) {
         const css = {};
-        const propertyMap = {
-            color: 'color',
-            fontSize: 'font-size',
-            fontWeight: 'font-weight',
-            fontFamily: 'font-family',
-            textAlign: 'text-align',
-            backgroundColor: 'background-color',
-            width: 'width',
-            height: 'height',
-            border: 'border',
-            borderRadius: 'border-radius',
-            padding: 'padding',
-            margin: 'margin',
-            opacity: 'opacity',
-            zIndex: 'z-index'
-        };
+        if (!styles) return css;
 
-        for (const [key, value] of Object.entries(styles || {})) {
-            const cssProperty = propertyMap[key] || key;
-            
-            // Handle numeric values
-            if (typeof value === 'number') {
-                if (['fontSize', 'borderRadius', 'width', 'height', 'padding', 'margin'].includes(key)) {
-                    css[cssProperty] = `${value}px`;
-                    continue;
-                }
+        const unitProperties = [
+            'width', 'height', 'fontSize', 
+            'borderRadius', 'padding', 'margin',
+            'borderWidth', 'lineHeight', 'letterSpacing'
+        ];
+
+        for (const [key, value] of Object.entries(styles)) {
+            if (value === undefined || value === null) continue;
+
+            // Convert camelCase to kebab-case
+            const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+
+            // Add units to numeric values
+            if (typeof value === 'number' && unitProperties.includes(key)) {
+                css[cssKey] = `${value}px`;
+            } 
+            // Handle special cases
+            else if (key === 'fontFamily') {
+                css[cssKey] = `"${value.replace(/"/g, '')}", Arial, sans-serif`;
             }
-            
-            css[cssProperty] = value;
+            else {
+                css[cssKey] = value;
+            }
         }
 
         return css;
@@ -130,40 +88,55 @@ function generateHTMLAndCSS(elements) {
             position = { x: 0, y: 0 },
             content = '',
             customText = '',
-            imageUrl = null,
-            imagePreview = null
+            imageUrl = null
         } = element;
 
         const className = `element-${id}`;
         const elementContent = content || customText || '';
-        const imgSrc = imageUrl || imagePreview;
+        const finalStyles = convertStyles(styles);
 
-        // Generate CSS
-        const convertedStyles = convertStyles(styles);
+        // Generate CSS with responsive positioning
         let cssRule = `.${className} {\n`;
-        cssRule += `  left: ${position.x}px;\n`;
-        cssRule += `  top: ${position.y}px;\n`;
+        cssRule += `  position: absolute;\n`;
         
-        for (const [property, value] of Object.entries(convertedStyles)) {
-            cssRule += `  ${property}: ${value};\n`;
+        // Convert position to percentage for responsiveness
+        cssRule += `  left: ${(position.x / viewportWidth) * 100}%;\n`;
+        cssRule += `  top: ${position.y}px;\n`;
+        cssRule += `  transform: translateX(-50%);\n`; // Center horizontally
+
+        // Add all converted styles
+        for (const [prop, value] of Object.entries(finalStyles)) {
+            cssRule += `  ${prop}: ${value};\n`;
         }
 
-        cssRule += `}`;
+        cssRule += `}\n`;
+
+        // Media queries for different screen sizes
+        cssRule += `@media (max-width: 768px) {
+            .${className} {
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                ${finalStyles.width ? `width: 90% !important;` : ''}
+            }
+        }`;
+
         cssRules.push(cssRule);
 
         // Generate HTML based on component type
         switch (label.toLowerCase()) {
             case 'image':
-                return `<div class="${className} drag-item drag-image">
-                    ${imgSrc 
-                        ? `<img src="${imgSrc}" alt="User content" onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML='<span>Image failed to load</span>'">`
-                        : '<span>Click to upload image</span>'}
+                return `<div class="${className} drag-item">
+                    ${imageUrl 
+                        ? `<img src="${imageUrl}" alt="Content" style="width:100%;height:100%;object-fit:cover;">`
+                        : '<div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;">Image</div>'}
                 </div>`;
 
             case 'header':
-                return `<div class="${className} drag-item">
-                    <h1>${elementContent || 'Header'}</h1>
-                </div>`;
+                return `<header class="${className} drag-item">
+                    <h1 style="${finalStyles.fontFamily ? `font-family:${finalStyles.fontFamily}` : ''}">
+                        ${elementContent || 'Header'}
+                    </h1>
+                </header>`;
 
             case 'text':
                 return `<div class="${className} drag-item">
@@ -172,44 +145,22 @@ function generateHTMLAndCSS(elements) {
 
             case 'button':
                 return `<div class="${className} drag-item">
-                    <button class="drag-button">${elementContent || 'Button'}</button>
+                    <button style="
+                        ${finalStyles.backgroundColor ? `background:${finalStyles.backgroundColor};` : ''}
+                        ${finalStyles.color ? `color:${finalStyles.color};` : ''}
+                        padding: 8px 16px;
+                        border: none;
+                        cursor: pointer;
+                    ">
+                        ${elementContent || 'Button'}
+                    </button>
                 </div>`;
 
-            case 'navbar':
-                return `<div class="${className} drag-item dragnav">
-                    <div class="draglogo">${elementContent || 'Logo'}</div>
-                    <ul>
-                        <li>Link 1</li>
-                        <li>Link 2</li>
-                        <li>Link 3</li>
-                    </ul>
-                </div>`;
-
-            case 'footer':
-                return `<footer class="${className} drag-item drag-footer">
-                    <div>
-                        <h4>Company</h4>
-                        <ul>
-                            <li>About</li>
-                            <li>Careers</li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h4>Support</h4>
-                        <ul>
-                            <li>Contact</li>
-                            <li>FAQ</li>
-                        </ul>
-                    </div>
-                </footer>`;
-
-            case 'card':
-                return `<div class="${className} drag-item drag-card">
-                    <p>${elementContent || 'Card content'}</p>
-                </div>`;
-
+            // Add more component cases as needed
             default:
-                return `<div class="${className} drag-item">${elementContent || label}</div>`;
+                return `<div class="${className} drag-item">
+                    ${elementContent || label}
+                </div>`;
         }
     }
 
@@ -218,7 +169,7 @@ function generateHTMLAndCSS(elements) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generated Layout</title>
+    <title>Your Designed Page</title>
     <style>
         ${baseStyles}
         ${cssRules.join('\n')}
@@ -232,7 +183,7 @@ function generateHTMLAndCSS(elements) {
 </body>
 </html>`;
 
-    return { html, css: `${baseStyles}\n${cssRules.join('\n')}` };
+    return { html };
 }
 
 module.exports = { generateHTMLAndCSS };
