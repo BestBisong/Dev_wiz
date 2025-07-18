@@ -1,7 +1,6 @@
 const archiver = require('archiver');
 const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
 const Layout = require('../models/layout.model');
-const mongoose = require('mongoose');
 
 exports.createLayout = async (req, res) => {
     try {
@@ -14,13 +13,12 @@ exports.createLayout = async (req, res) => {
 
         const { elements, name = 'my_layout' } = req.body;
         
-        // Process elements to ensure image URLs are properly formatted
+        // Process elements to ensure proper image URLs
         const processedElements = elements.map(element => {
-            // If it's an image element and has imagePreview, use that as content
             if (element.label === 'Image' && element.imagePreview) {
                 return {
                     ...element,
-                    content: element.imagePreview
+                    content: element.imagePreview // Ensure imagePreview is used as content
                 };
             }
             return element;
@@ -29,31 +27,45 @@ exports.createLayout = async (req, res) => {
         const { html, css } = generateHTMLAndCSS(processedElements);
         
         const archive = archiver('zip', {
-            zlib: { level: 9 }
+            zlib: { level: 9 } // Maximum compression
         });
 
-        res.set({
-            'Content-Type': 'application/zip',
-            'Content-Disposition': `attachment; filename="${name.replace(/[^a-z0-9]/gi, '_')}.zip"`
-        });
-
-        archive.pipe(res);
-
-        archive.append(html, { name: 'index.html' });
-        archive.append(css, { name: 'styles.css' });
+        // Set proper headers before piping
+        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+        res.setHeader('Content-Type', 'application/zip');
 
         archive.on('warning', (err) => {
             if (err.code === 'ENOENT') {
                 console.warn('Archive warning:', err);
             } else {
-                throw err;
+                console.error('Archive error:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        status: 'error',
+                        message: 'Archive creation failed'
+                    });
+                }
             }
         });
 
         archive.on('error', (err) => {
-            throw err;
+            console.error('Archive error:', err);
+            if (!res.headersSent) {
+                res.status(500).json({
+                    status: 'error',
+                    message: 'Archive creation failed'
+                });
+            }
         });
 
+        // Pipe archive to response
+        archive.pipe(res);
+
+        // Add files to archive
+        archive.append(html, { name: 'index.html' });
+        archive.append(css, { name: 'styles.css' });
+
+        // Finalize the archive
         await archive.finalize();
 
     } catch (error) {
@@ -65,35 +77,5 @@ exports.createLayout = async (req, res) => {
                 error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
-    }
-};
-
-exports.getLayout = async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Invalid ID format'
-            });
-        }
-
-        const layout = await Layout.findById(req.params.id);
-        if (!layout) {
-            return res.status(404).json({ 
-                status: 'error',
-                message: 'Layout not found' 
-            });
-        }
-        res.json({
-            status: 'success',
-            data: layout
-        });
-    } catch (error) {
-        console.error("Error fetching layout:", error);
-        res.status(500).json({
-            status: 'error',
-            message: 'Failed to fetch layout',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
     }
 };
