@@ -4,7 +4,7 @@ function generateHTMLAndCSS(elements) {
     }
 
     const cssRules = [];
-    const ids = []; // Collect IDs here
+    const ids = [];
 
     const baseStyles = `
     /* Base Styles */
@@ -29,6 +29,77 @@ function generateHTMLAndCSS(elements) {
         height: auto;
         display: block;
     }
+
+    /* Additional base styles for form elements */
+    input, textarea, select {
+        padding: 8px;
+        margin: 5px 0;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    button {
+        padding: 10px 15px;
+        background-color: #1e31e3;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .form-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px;
+        background-color: white;
+        border-radius: 8px;
+    }
+
+    .drag-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .grid-1 {
+        background-color: #ddd;
+        min-height: 50px;
+    }
+
+    .dragnav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background-color: #333;
+        color: white;
+    }
+
+    .dragnav ul {
+        display: flex;
+        list-style: none;
+        gap: 20px;
+        margin: 0;
+        padding: 0;
+    }
+
+    .drag-footer {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding: 20px;
+        background-color: #333;
+        color: white;
+    }
+
+    .drag-footer ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
     `;
 
     function processElement(element, index) {
@@ -38,15 +109,14 @@ function generateHTMLAndCSS(elements) {
             styles = {},
             position = { x: 0, y: 0 },
             content = '',
-            children = []
+            children = [],
+            imageUrl = null
         } = element;
 
-        ids.push(id); // Collect the ID
+        ids.push(id);
 
-        // Generate a unique CSS class
         const className = `element-${label.toLowerCase().replace(/\s+/g, '-')}-${id}`;
 
-        // Create CSS rule
         let cssRule = `.${className} {\n`;
         cssRule += `  position: absolute;\n`;
         cssRule += `  left: ${position.x}px;\n`;
@@ -63,23 +133,95 @@ function generateHTMLAndCSS(elements) {
 
         cssRules.push(cssRule);
 
-        // Process children recursively
         let childHTML = '';
         if (Array.isArray(children) && children.length > 0) {
             childHTML = children.map((child, idx) => processElement(child, idx)).join('\n');
         }
 
-        // Generate HTML for the element, including children if any
         let elementHTML = '';
         switch (label.toLowerCase()) {
             case 'header':
                 elementHTML = `<header class="${className}">${content || 'Header'}\n${childHTML}</header>`;
                 break;
             case 'image':
-                elementHTML = `<img class="${className}" src="${content || '#'}" alt="User Image">`;
+                elementHTML = `<img class="${className}" src="${imageUrl || '#'}" alt="User Image">`;
                 break;
             case 'section':
                 elementHTML = `<section class="${className}">${content || ''}\n${childHTML}</section>`;
+                break;
+            case 'input':
+                elementHTML = `<input class="${className}" type="text" placeholder="${content || 'Input field'}" />`;
+                break;
+            case 'card':
+                elementHTML = `<div class="${className} drag-card">${content || 'Card content'}\n${childHTML}</div>`;
+                break;
+            case 'grid':
+                elementHTML = `<div class="${className} drag-grid">
+                    <div class="grid-1"></div>
+                    <div class="grid-1"></div>
+                    <div class="grid-1"></div>
+                    <div class="grid-1"></div>
+                </div>`;
+                break;
+            case 'form':
+                elementHTML = `<div class="${className} form-container">
+                    <input type="text" placeholder="First name" />
+                    <input type="text" placeholder="Last name" />
+                    <input type="email" placeholder="Email" />
+                    <textarea placeholder="Message"></textarea>
+                    <button type="submit">Submit</button>
+                </div>`;
+                break;
+            case 'navbar':
+                elementHTML = `<nav class="${className} dragnav">
+                    <div class="draglogo">${content || 'Logo'}</div>
+                    <ul>
+                        <li>Link 1</li>
+                        <li>Link 2</li>
+                        <li>Link 3</li>
+                    </ul>
+                </nav>`;
+                break;
+            case 'footer':
+                elementHTML = `<footer class="${className} drag-footer">
+                    <div>
+                        <h4>Company</h4>
+                        <ul>
+                            <li>About</li>
+                            <li>Careers</li>
+                            <li>Contact</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>Support</h4>
+                        <ul>
+                            <li>Help Center</li>
+                            <li>Terms</li>
+                            <li>Privacy</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>Follow Us</h4>
+                        <ul>
+                            <li>Twitter</li>
+                            <li>Facebook</li>
+                            <li>Instagram</li>
+                        </ul>
+                    </div>
+                </footer>`;
+                break;
+            case 'button':
+                elementHTML = `<button class="${className}">${content || 'Button'}</button>`;
+                break;
+            case 'text':
+                elementHTML = `<p class="${className}">${content || 'Text content'}</p>`;
+                break;
+            case 'list':
+                elementHTML = `<ul class="${className}">
+                    <li>Item 1</li>
+                    <li>Item 2</li>
+                    <li>Item 3</li>
+                </ul>`;
                 break;
             default:
                 elementHTML = `<div class="${className}">${content || ''}\n${childHTML}</div>`;
@@ -88,7 +230,6 @@ function generateHTMLAndCSS(elements) {
         return elementHTML;
     }
 
-    // Generate HTML for all top-level elements
     const htmlElements = elements.map((el, idx) => processElement(el, idx));
 
     const css = `${baseStyles}\n${cssRules.join('\n')}`;
@@ -99,7 +240,7 @@ function generateHTMLAndCSS(elements) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generated Layout</title>
-    <link rel="stylesheet" type="text/css" href="styles.css"/>
+    <style>${css}</style>
 </head>
 <body>
     <div class="canvas-container">
