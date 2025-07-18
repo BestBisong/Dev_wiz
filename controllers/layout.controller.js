@@ -1,8 +1,11 @@
 const archiver = require('archiver');
 const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
+const path = require('path');
+const fs = require('fs');
 
 exports.createLayout = async (req, res) => {
     try {
+        // 1. Validate input
         if (!req.body.elements || !Array.isArray(req.body.elements)) {
             return res.status(400).json({
                 status: 'error',
@@ -12,25 +15,47 @@ exports.createLayout = async (req, res) => {
 
         const { elements, name = 'my_layout' } = req.body;
         
-        // Process elements to ensure image URLs are absolute
+        // 2. Process elements for absolute URLs and proper formatting
         const processedElements = elements.map(element => {
-            if (element.label === 'Image' && element.imageUrl && !element.imageUrl.startsWith('http')) {
-                return {
-                    ...element,
-                    imageUrl: `${req.protocol}://${req.get('host')}${element.imageUrl}`
-                };
+            const processed = { ...element };
+            
+            // Handle image URLs
+            if (element.label === 'Image' && element.imageUrl) {
+                if (!element.imageUrl.startsWith('http') && !element.imageUrl.startsWith('data:')) {
+                    processed.imageUrl = `${req.protocol}://${req.get('host')}${element.imageUrl}`;
+                }
             }
-            return element;
+            
+            // Ensure all styles are properly formatted
+            if (element.styles) {
+                processed.styles = { ...element.styles };
+                
+                // Convert numeric values to pixels where needed
+                const pixelProps = ['width', 'height', 'fontSize', 'borderRadius', 'padding', 'margin'];
+                pixelProps.forEach(prop => {
+                    if (typeof processed.styles[prop] === 'number') {
+                        processed.styles[prop] = `${processed.styles[prop]}px`;
+                    }
+                });
+                
+                // Ensure font family is properly quoted
+                if (processed.styles.fontFamily) {
+                    processed.styles.fontFamily = `"${processed.styles.fontFamily.replace(/"/g, '')}", sans-serif`;
+                }
+            }
+            
+            return processed;
         });
 
-        const { html, css } = generateHTMLAndCSS(processedElements);
+        // 3. Generate perfect HTML that matches the editor
+        const { html } = generateHTMLAndCSS(processedElements);
         
-        // Create archive
+        // 4. Create archive with all necessary files
         const archive = archiver('zip', {
             zlib: { level: 9 } // Maximum compression
         });
 
-        // Handle archive errors
+        // Error handling
         archive.on('error', (err) => {
             console.error('Archive error:', err);
             if (!res.headersSent) {
@@ -42,18 +67,28 @@ exports.createLayout = async (req, res) => {
         });
 
         // Set response headers
-        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+        const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        res.attachment(`${safeName}.zip`);
         res.setHeader('Content-Type', 'application/zip');
 
         // Pipe archive to response
         archive.pipe(res);
 
-        // Add files to archive
+        // Add main HTML file
         archive.append(html, { name: 'index.html' });
-        archive.append(css, { name: 'styles.css' });
 
-        // Finalize the archive (no need to await as it's event-based)
-        archive.finalize();
+        // Add supporting files (create these directories in your project)
+        const assetsDir = path.join(__dirname, '../public/assets');
+        if (fs.existsSync(assetsDir)) {
+            archive.directory(assetsDir, 'assets');
+        }
+
+        // Add any required dependencies
+        archive.append('<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">', 
+            { name: 'fonts.html' });
+
+        // Finalize the archive
+        await archive.finalize();
 
     } catch (error) {
         console.error('Error generating layout:', error);
