@@ -1,97 +1,42 @@
-const archiver = require('archiver');
-const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
-const Layout = require('../models/layout.model');
+const fs = require('fs');
+const path = require('path');
+const { generateHTMLAndCSS } = require('../utils/generateHTMLAndCSS'); // adjust the path if needed
 
-exports.createLayout = async (req, res) => {
-    try {
-        if (!req.body.elements || !Array.isArray(req.body.elements)) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Elements array is required'
-            });
-        }
-
-        const { elements, name = 'my_layout' } = req.body;
-        
-        // Process elements to ensure image URLs are absolute
-        const processedElements = elements.map(element => {
-            if (element.type === 'image' && element.imageUrl) {
-                // Handle both relative and absolute URLs
-                if (!element.imageUrl.startsWith('http') && !element.imageUrl.startsWith('/')) {
-                    return {
-                        ...element,
-                        imageUrl: `${req.protocol}://${req.get('host')}/images/${element.imageUrl}`
-                    };
-                }
-                if (element.imageUrl.startsWith('/') && !element.imageUrl.startsWith('//')) {
-                    return {
-                        ...element,
-                        imageUrl: `${req.protocol}://${req.get('host')}${element.imageUrl}`
-                    };
-                }
-            }
-            return element;
-        });
-
-        // Generate HTML and CSS with proper error handling
-        let html, css;
+class CanvasController {
+    static async exportCanvas(req, res, next) {
         try {
-            const result = generateHTMLAndCSS(processedElements);
-            html = result.html;
-            css = result.css;
-        } catch (error) {
-            console.error('HTML/CSS generation error:', error);
-            return res.status(500).json({
-                status: 'error',
-                message: 'Failed to generate HTML/CSS'
-            });
-        }
+            const { elements } = req.body;
 
-        // Create archive
-        const archive = archiver('zip', {
-            zlib: { level: 9 }
-        });
-
-        // Set response headers before piping
-        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
-        
-        // Handle archive events
-        archive.on('warning', (err) => {
-            if (err.code === 'ENOENT') {
-                console.warn('Archive warning:', err);
-            } else {
-                throw err;
+            if (!Array.isArray(elements)) {
+                return res.status(400).json({ error: 'Elements must be an array.' });
             }
-        });
 
-        archive.on('error', (err) => {
-            console.error('Archive error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({
-                    status: 'error',
-                    message: 'Failed to create zip file'
-                });
+            // Generate HTML and CSS
+            const { html } = generateHTMLAndCSS(elements);
+
+            // Optional: Save to file (e.g., for download later)
+            const outputDir = path.join(__dirname, '../exports');
+            if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir);
             }
-        });
 
-        // Pipe archive to response
-        archive.pipe(res);
+            const fileName = `canvas-${Date.now()}.html`;
+            const filePath = path.join(outputDir, fileName);
 
-        // Add files to archive
-        archive.append(html, { name: 'index.html' });
-        archive.append(css, { name: 'styles.css' });
+            fs.writeFileSync(filePath, html, 'utf8');
 
-        // Finalize the archive
-        await archive.finalize();
-
-    } catch (error) {
-        console.error('Error generating layout:', error);
-        if (!res.headersSent) {
-            res.status(500).json({
-                status: 'error',
-                message: 'Failed to generate layout',
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            // Send back the file URL or HTML directly
+            res.json({
+                message: 'Canvas exported successfully.',
+                fileUrl: `/exports/${fileName}`, // Assumes /exports is a static folder served by Express
+                htmlPreview: html // Optional: Return the HTML directly for preview in frontend
             });
+
+        } catch (err) {
+            console.error('Export Error:', err);
+            next(err);
         }
     }
-};
+}
+
+module.exports = CanvasController;
