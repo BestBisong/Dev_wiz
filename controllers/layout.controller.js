@@ -1,6 +1,5 @@
 const archiver = require('archiver');
 const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
-const Layout = require('../models/layout.model');
 
 exports.createLayout = async (req, res) => {
     try {
@@ -13,12 +12,12 @@ exports.createLayout = async (req, res) => {
 
         const { elements, name = 'my_layout' } = req.body;
         
-        // Process elements to ensure proper image URLs
+        // Process elements to ensure image URLs are absolute
         const processedElements = elements.map(element => {
-            if (element.label === 'Image' && element.imagePreview) {
+            if (element.label === 'Image' && element.imageUrl && !element.imageUrl.startsWith('http')) {
                 return {
                     ...element,
-                    content: element.imagePreview // Ensure imagePreview is used as content
+                    imageUrl: `${req.protocol}://${req.get('host')}${element.imageUrl}`
                 };
             }
             return element;
@@ -26,37 +25,25 @@ exports.createLayout = async (req, res) => {
 
         const { html, css } = generateHTMLAndCSS(processedElements);
         
+        // Create archive
         const archive = archiver('zip', {
             zlib: { level: 9 } // Maximum compression
         });
 
-        // Set proper headers before piping
-        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
-        res.setHeader('Content-Type', 'application/zip');
-
-        archive.on('warning', (err) => {
-            if (err.code === 'ENOENT') {
-                console.warn('Archive warning:', err);
-            } else {
-                console.error('Archive error:', err);
-                if (!res.headersSent) {
-                    res.status(500).json({
-                        status: 'error',
-                        message: 'Archive creation failed'
-                    });
-                }
-            }
-        });
-
+        // Handle archive errors
         archive.on('error', (err) => {
             console.error('Archive error:', err);
             if (!res.headersSent) {
                 res.status(500).json({
                     status: 'error',
-                    message: 'Archive creation failed'
+                    message: 'Failed to create zip file'
                 });
             }
         });
+
+        // Set response headers before piping
+        res.attachment(`${name.replace(/[^a-z0-9]/gi, '_')}.zip`);
+        res.setHeader('Content-Type', 'application/zip');
 
         // Pipe archive to response
         archive.pipe(res);
