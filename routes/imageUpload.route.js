@@ -42,21 +42,18 @@ router.post('/upload-image', upload.single('image'), (req, res) => {
             error: 'No file uploaded' 
         });
     }
-    
-    // Use absolute URL
+
     const fileUrl = `${req.protocol}://${req.get('host')}/images/${req.file.filename}`;
     
     res.status(200).json({ 
         success: true,
-        imageUrl: fileUrl  // Consistent property name
+        imageUrl: fileUrl
     });
 });
-
-// Static files
 router.use('/images', express.static(path.join(__dirname, '../uploads/images'), {
     setHeaders: (res) => {
         res.set('Cache-Control', 'public, max-age=31536000');
     }
-});
+}));
 
 module.exports = router;
