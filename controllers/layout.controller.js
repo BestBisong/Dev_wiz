@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { generateHTMLAndCSS } = require('../utils/generateHTMLAndCSS'); // adjust the path if needed
+const { generateHTMLAndCSS } = require('../utils/htmlGenerator'); // adjust the path if needed
 
 class CanvasController {
     static async exportCanvas(req, res, next) {
