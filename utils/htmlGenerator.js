@@ -6,41 +6,45 @@ function generateHTMLAndCSS(elements) {
     const cssRules = [];
     const ids = [];
 
+    // Base styles that match the editor's preview
     const baseStyles = `
     /* Base Styles */
-    body {
+    * {
+        box-sizing: border-box;
         margin: 0;
         padding: 0;
+    }
+    
+    body {
+        font-family: 'Open-sans', Arial, sans-serif;
+        line-height: 1.5;
         min-height: 100vh;
         position: relative;
-        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        margin: 0;
+        padding: 0;
     }
 
     .canvas-container {
         position: relative;
         width: 100%;
         min-height: 100vh;
+        background-color: #f0f0f0;
+        margin: 0 auto;
         overflow: auto;
-        background: #f0f0f0;
     }
 
-    .canvas-container img {
-        max-width: 100%;
-        height: auto;
-        display: block;
-    }
-
-    /* Additional base styles for form elements */
-    input, textarea, select {
+    /* Element base styles */
+    .drag-item {
+        position: absolute;
         padding: 8px;
-        margin: 5px 0;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        width: 100%;
-        box-sizing: border-box;
+        min-width: 50px;
+        min-height: 30px;
+        user-select: none;
     }
 
-    button {
+    /* Specific component styles */
+    .drag-button {
         padding: 10px 15px;
         background-color: #1e31e3;
         color: white;
@@ -49,13 +53,32 @@ function generateHTMLAndCSS(elements) {
         cursor: pointer;
     }
 
+    .drag-image {
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .drag-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
     .form-container {
         display: flex;
         flex-direction: column;
         gap: 10px;
         padding: 15px;
         background-color: white;
-        border-radius: 8px;
+    }
+
+    .input-field {
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
     }
 
     .drag-grid {
@@ -95,10 +118,11 @@ function generateHTMLAndCSS(elements) {
         color: white;
     }
 
-    .drag-footer ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
+    .drag-card {
+        padding: 15px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     `;
 
@@ -115,17 +139,29 @@ function generateHTMLAndCSS(elements) {
 
         ids.push(id);
 
-        const className = `element-${label.toLowerCase().replace(/\s+/g, '-')}-${id}`;
+        const className = `element-${id}`;
 
         let cssRule = `.${className} {\n`;
         cssRule += `  position: absolute;\n`;
         cssRule += `  left: ${position.x}px;\n`;
         cssRule += `  top: ${position.y}px;\n`;
 
-        Object.entries(styles).forEach(([key, value]) => {
+        // Convert React style props to CSS
+        const styleMap = {
+            color: styles.color || '#000000',
+            fontSize: styles.fontSize ? `${styles.fontSize}px` : '16px',
+            fontWeight: styles.fontWeight || '400',
+            fontFamily: styles.fontFamily || 'Open-sans, Arial, sans-serif',
+            textAlign: styles.textAlign || 'left',
+            backgroundColor: styles.backgroundColor || 'transparent',
+            width: styles.width ? `${styles.width}px` : 'auto',
+            height: styles.height ? `${styles.height}px` : 'auto',
+            border: selectedItem?.id === item.id ? '2px solid #1e31e3' : '1px solid transparent'
+        };
+
+        Object.entries(styleMap).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
-                const cssProperty = key.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
-                cssRule += `  ${cssProperty}: ${value};\n`;
+                cssRule += `  ${key}: ${value};\n`;
             }
         });
 
@@ -141,22 +177,24 @@ function generateHTMLAndCSS(elements) {
         let elementHTML = '';
         switch (label.toLowerCase()) {
             case 'header':
-                elementHTML = `<header class="${className}">${content || 'Header'}\n${childHTML}</header>`;
+                elementHTML = `<header class="${className} drag-item">${content || 'Header'}</header>`;
                 break;
             case 'image':
-                elementHTML = `<img class="${className}" src="${imageUrl || '#'}" alt="User Image">`;
+                elementHTML = `<div class="${className} drag-item drag-image">
+                    <img src="${imageUrl || '#'}" alt="User Image" style="width:100%;height:100%;object-fit:cover;">
+                </div>`;
                 break;
             case 'section':
-                elementHTML = `<section class="${className}">${content || ''}\n${childHTML}</section>`;
+                elementHTML = `<section class="${className} drag-item">${content || ''}</section>`;
                 break;
             case 'input':
-                elementHTML = `<input class="${className}" type="text" placeholder="${content || 'Input field'}" />`;
+                elementHTML = `<input class="${className} drag-item input-field" type="text" placeholder="${content || 'Input field'}" />`;
                 break;
             case 'card':
-                elementHTML = `<div class="${className} drag-card">${content || 'Card content'}\n${childHTML}</div>`;
+                elementHTML = `<div class="${className} drag-item drag-card">${content || 'Card content'}</div>`;
                 break;
             case 'grid':
-                elementHTML = `<div class="${className} drag-grid">
+                elementHTML = `<div class="${className} drag-item drag-grid">
                     <div class="grid-1"></div>
                     <div class="grid-1"></div>
                     <div class="grid-1"></div>
@@ -164,16 +202,16 @@ function generateHTMLAndCSS(elements) {
                 </div>`;
                 break;
             case 'form':
-                elementHTML = `<div class="${className} form-container">
-                    <input type="text" placeholder="First name" />
-                    <input type="text" placeholder="Last name" />
-                    <input type="email" placeholder="Email" />
-                    <textarea placeholder="Message"></textarea>
-                    <button type="submit">Submit</button>
+                elementHTML = `<div class="${className} drag-item form-container">
+                    <input type="text" class="input-field" placeholder="First name" />
+                    <input type="text" class="input-field" placeholder="Last name" />
+                    <input type="email" class="input-field" placeholder="Email" />
+                    <textarea class="input-field" placeholder="Message"></textarea>
+                    <button class="drag-button">Submit</button>
                 </div>`;
                 break;
             case 'navbar':
-                elementHTML = `<nav class="${className} dragnav">
+                elementHTML = `<nav class="${className} drag-item dragnav">
                     <div class="draglogo">${content || 'Logo'}</div>
                     <ul>
                         <li>Link 1</li>
@@ -183,7 +221,7 @@ function generateHTMLAndCSS(elements) {
                 </nav>`;
                 break;
             case 'footer':
-                elementHTML = `<footer class="${className} drag-footer">
+                elementHTML = `<footer class="${className} drag-item drag-footer">
                     <div>
                         <h4>Company</h4>
                         <ul>
@@ -211,20 +249,20 @@ function generateHTMLAndCSS(elements) {
                 </footer>`;
                 break;
             case 'button':
-                elementHTML = `<button class="${className}">${content || 'Button'}</button>`;
+                elementHTML = `<button class="${className} drag-item drag-button">${content || 'Button'}</button>`;
                 break;
             case 'text':
-                elementHTML = `<p class="${className}">${content || 'Text content'}</p>`;
+                elementHTML = `<p class="${className} drag-item">${content || 'Text content'}</p>`;
                 break;
             case 'list':
-                elementHTML = `<ul class="${className}">
+                elementHTML = `<ul class="${className} drag-item">
                     <li>Item 1</li>
                     <li>Item 2</li>
                     <li>Item 3</li>
                 </ul>`;
                 break;
             default:
-                elementHTML = `<div class="${className}">${content || ''}\n${childHTML}</div>`;
+                elementHTML = `<div class="${className} drag-item">${content || ''}</div>`;
         }
 
         return elementHTML;
@@ -232,15 +270,16 @@ function generateHTMLAndCSS(elements) {
 
     const htmlElements = elements.map((el, idx) => processElement(el, idx));
 
-    const css = `${baseStyles}\n${cssRules.join('\n')}`;
-
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generated Layout</title>
-    <style>${css}</style>
+    <style>
+        ${baseStyles}
+        ${cssRules.join('\n')}
+    </style>
 </head>
 <body>
     <div class="canvas-container">
@@ -249,7 +288,7 @@ function generateHTMLAndCSS(elements) {
 </body>
 </html>`;
 
-    return { html, css, ids };
+    return { html, css: `${baseStyles}\n${cssRules.join('\n')}`, ids };
 }
 
 module.exports = { generateHTMLAndCSS };
