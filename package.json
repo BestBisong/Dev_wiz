@@ -13,6 +13,7 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "cors": "^2.8.5",
+    "docx": "^9.5.1",
     "dompurify": "^3.2.6",
     "express": "^5.1.0",
     "jsdom": "^26.1.0",
