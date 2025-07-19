@@ -6,9 +6,14 @@ const fs = require('fs');
 
 const app = express();
 
-// Create uploads directory if it doesn't exist
+// Create necessary directories if they don't exist
 const uploadDir = path.join(__dirname, 'uploads/images');
-fs.mkdirSync(uploadDir, { recursive: true });
+const exportDir = path.join(__dirname, 'exports');
+[uploadDir, exportDir].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+});
 
 // Enhanced CORS setup
 app.use(cors({
@@ -28,7 +33,7 @@ connectDB().catch(err => {
     process.exit(1);
 });
 
-// Static files with proper caching headers
+// Static files configurations
 app.use('/images', express.static(uploadDir, {
     setHeaders: (res, filePath) => {
         const mimeType = express.static.mime.lookup(filePath);
@@ -38,16 +43,31 @@ app.use('/images', express.static(uploadDir, {
     }
 }));
 
-// Register routes
-app.use('/layouts', require('./routes/layout.routes'));
-app.use('/', require('./routes/imageUpload.route'));
+// Serve exported canvas files
+app.use('/exports', express.static(exportDir, {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+            res.set('Content-Type', 'text/html');
+        }
+    }
+}));
 
 // Static assets
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
+// Register routes
+app.use('/layouts', require('./routes/layout.routes'));
+app.use('/', require('./routes/imageUpload.route'));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy' });
+    res.status(200).json({ 
+        status: 'healthy',
+        directories: {
+            uploads: uploadDir,
+            exports: exportDir
+        }
+    });
 });
 
 // Enhanced error handling
@@ -58,7 +78,7 @@ app.use((err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ 
             success: false,
-            error: 'File too large. Maximum 5MB allowed' 
+            error: 'File too large. Maximum 50MB allowed' 
         });
     }
     
@@ -82,6 +102,7 @@ const server = app.listen(PORT, () => {
     ****************************************
     * Application running on port ${PORT}     *
     * Upload directory: ${uploadDir}  *
+    * Export directory: ${exportDir}  *
     * Health check: http://localhost:${PORT}/health *
     ****************************************
     `);
