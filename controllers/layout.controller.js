@@ -1,37 +1,44 @@
-const fs = require('fs');
-const path = require('path');
 const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
 
 class CanvasController {
     static async exportCanvas(req, res, next) {
         try {
-            const { elements, baseUrl } = req.body;
-
-            if (!Array.isArray(elements)) {
-                return res.status(400).json({ error: 'Elements must be an array.' });
+            // Validate input
+            if (!req.body.elements) {
+                return res.status(400).json({ error: 'Missing elements data' });
             }
 
-            // Generate HTML with proper base URL handling
+            const { elements, baseUrl } = req.body;
+            
+            // Force elements to be an array
+            const elementsArray = Array.isArray(elements) ? elements : [elements];
+            
+            // Generate HTML with fallback URL
             const { html } = generateHTMLAndCSS(
-                elements, 
+                elementsArray,
                 baseUrl || `${req.protocol}://${req.get('host')}`
             );
 
-            // Validate HTML
-            if (!html || typeof html !== 'string' || html.length < 10) {
-                throw new Error('Generated HTML is invalid');
+            // Validate HTML output
+            if (!html || typeof html !== 'string') {
+                throw new Error('Failed to generate HTML');
             }
 
-            // Set proper download headers
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="canvas-export-${Date.now()}.html"`);
-            res.setHeader('Content-Length', Buffer.byteLength(html, 'utf8'));
+            // Send response
+            res.set({
+                'Content-Type': 'text/html; charset=utf-8',
+                'Content-Disposition': 'attachment; filename="design-export.html"',
+                'Content-Length': Buffer.byteLength(html)
+            });
             
-            res.send(html);
+            return res.send(html);
 
         } catch (err) {
             console.error('Export Error:', err);
-            next(new Error(`Failed to export canvas: ${err.message}`));
+            return res.status(500).json({ 
+                error: 'Export failed',
+                details: process.env.NODE_ENV === 'development' ? err.message : undefined
+            });
         }
     }
 }
