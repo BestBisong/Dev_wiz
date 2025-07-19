@@ -78,7 +78,7 @@ exports.createArticle = async (req, res) => {
     }
 
     // Create article in DB
-    const article = await Article.create({
+     var article = await Article.create({
       title: sanitize(title),
       content: sanitizedContent,
       layout: layoutId,
