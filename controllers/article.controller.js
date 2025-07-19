@@ -11,31 +11,8 @@ const CACHE_DURATION = 3600; // 1 hour cache
 // Create and publish article
 exports.createArticle = async (req, res) => {
   try {
-    const { title, content, layoutId, metaTitle, metaDescription, keywords, ogImage, styles } = req.body;
+    const { title, content, layoutId, metaTitle, metaDescription, keywords, styles } = req.body;
     
-    // Validate required fields
-    if (!title || !content || !layoutId) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Title, content, and layout ID are required'
-      });
-    }
-
-    // Validate layout
-    if (!mongoose.Types.ObjectId.isValid(layoutId)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Invalid layout ID format'
-      });
-    }
-
-    const layout = await Layout.findById(layoutId);
-    if (!layout) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Layout not found'
-      });
-    }
 
     // Create slug and sanitize content
     const slug = slugify(title, { lower: true, strict: true });
@@ -51,7 +28,8 @@ exports.createArticle = async (req, res) => {
       publishedAt: Date.now(),
       metaTitle: metaTitle ? sanitize(metaTitle) : undefined,
       metaDescription: metaDescription ? sanitize(metaDescription) : undefined,
-      keywords: keywords ? keywords.map(k => sanitize(k)) : []
+      keywords: keywords ? keywords.map(k => sanitize(k)) : [],
+      styles:styles
     });
 
     // Generate public URL
