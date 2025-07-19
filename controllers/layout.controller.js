@@ -5,39 +5,27 @@ const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
 class CanvasController {
     static async exportCanvas(req, res, next) {
         try {
-            const { elements } = req.body;
+            const { elements, baseUrl } = req.body; // Add baseUrl from frontend
 
             if (!Array.isArray(elements)) {
                 return res.status(400).json({ error: 'Elements must be an array.' });
             }
 
-            const { html } = generateHTMLAndCSS(elements);
-            const fileName = `canvas-export-${Date.now()}.html`;
+            // Generate HTML with absolute URLs if needed
+            const { html } = generateHTMLAndCSS(elements, baseUrl || req.protocol + '://' + req.get('host'));
 
-            // Validate HTML first
+            // Validate HTML
             if (!html || typeof html !== 'string' || html.length < 10) {
                 throw new Error('Generated HTML is invalid');
             }
 
-            // Option 1: Direct download with proper headers
+            // Set proper headers
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            res.setHeader('Content-Disposition', `attachment; filename="canvas-export-${Date.now()}.html"`);
             res.setHeader('Content-Length', Buffer.byteLength(html, 'utf8'));
-            res.send(html);
-
-            // Option 2: If you want to save to file AND download
-            /*
-            const filePath = path.join(__dirname, '../exports', fileName);
-            fs.writeFileSync(filePath, html, { encoding: 'utf8' });
             
-            res.download(filePath, fileName, (err) => {
-                if (err) {
-                    console.error('Download failed:', err);
-                    fs.unlinkSync(filePath); // Clean up
-                    next(err);
-                }
-            });
-            */
+            // Send the file
+            res.send(html);
 
         } catch (err) {
             console.error('Export Error:', err);
