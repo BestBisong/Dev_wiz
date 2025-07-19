@@ -1,13 +1,13 @@
-function generateHTMLAndCSS(elements) {
+function generateHTMLAndCSS(elements, baseUrl = '') {
     if (!Array.isArray(elements)) {
         throw new Error('Elements must be an array');
     }
 
-    // Canvas dimensions
+    // Canvas dimensions from your frontend
     const editorWidth = 1440;
     const editorHeight = 900;
 
-    // Base CSS styles
+    // Enhanced Base CSS with responsive improvements
     const baseStyles = `
     /* Reset & Base Styles */
     * {
@@ -21,6 +21,7 @@ function generateHTMLAndCSS(elements) {
         height: 100%;
         font-family: 'Open Sans', Arial, sans-serif;
         background-color: #f0f0f0;
+        overflow-x: hidden;
     }
 
     .canvas-container {
@@ -30,17 +31,20 @@ function generateHTMLAndCSS(elements) {
         margin: 0 auto;
         background-color: #f0f0f0;
         overflow: visible;
+        transform-origin: top left;
     }
 
     .canvas-element {
         position: absolute;
         user-select: none;
+        transform-origin: top left;
     }
 
     .drag-image img {
         width: 100%;
         height: 100%;
         object-fit: cover;
+        display: block;
     }
 
     .drag-text {
@@ -61,6 +65,7 @@ function generateHTMLAndCSS(elements) {
             top: 0;
             width: 100%;
             height: auto;
+            transform: none !important;
         }
     }
     `;
@@ -71,12 +76,12 @@ function generateHTMLAndCSS(elements) {
         const {
             id,
             label,
-            type = 'div', // fallback type if label is missing
+            type = 'div',
             styles = {},
             position = { x: 0, y: 0 },
             content = '',
             customText = '',
-            imageUrl = null
+            imageUrl = ''
         } = element;
 
         const elementId = `element-${id}`;
@@ -87,12 +92,19 @@ function generateHTMLAndCSS(elements) {
         cssRule += `  left: ${position.x}px;\n`;
         cssRule += `  top: ${position.y}px;\n`;
 
+        // Convert styles to CSS
         Object.entries(styles).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
                 const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-
-                if (typeof value === 'number' && !['z-index', 'opacity', 'line-height', 'flex'].includes(key)) {
+                
+                // Handle different value types
+                if (typeof value === 'number' && !['zIndex', 'opacity', 'lineHeight', 'flex'].includes(key)) {
                     cssRule += `  ${cssKey}: ${value}px;\n`;
+                } else if (key === 'backgroundImage' && value.includes('url')) {
+                    // Ensure image URLs are absolute
+                    const absoluteUrl = value.startsWith('http') ? value : 
+                                      `${baseUrl}${value.startsWith('/') ? '' : '/'}${value}`;
+                    cssRule += `  ${cssKey}: url("${absoluteUrl}");\n`;
                 } else {
                     cssRule += `  ${cssKey}: ${value};\n`;
                 }
@@ -102,18 +114,16 @@ function generateHTMLAndCSS(elements) {
         cssRule += `}\n`;
         cssRules.push(cssRule);
 
-        // Determine HTML content
+        // Generate HTML content
         const actualLabel = label || type;
-
         let innerHTML = content || customText || '';
 
         switch (actualLabel.toLowerCase()) {
             case 'image':
-                if (!imageUrl) {
-                    return `<div class="${className} drag-image"><span>Image missing</span></div>`;
-                }
+                const imgSrc = imageUrl.startsWith('http') ? imageUrl : 
+                             `${baseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
                 return `<div class="${className} drag-image">
-                    <img src="${imageUrl}" alt="User Image"
+                    <img src="${imgSrc}" alt="User Image" 
                     onerror="this.onerror=null;this.style.display='none';this.parentElement.innerHTML='<span>Image failed to load</span>'">
                 </div>`;
             case 'button':
@@ -151,15 +161,29 @@ function generateHTMLAndCSS(elements) {
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        function adjustCanvasSize() {
             const canvas = document.querySelector('.canvas-container');
             const scale = Math.min(
                 window.innerWidth / ${editorWidth},
                 window.innerHeight / ${editorHeight}
             );
+            
+            // Apply scaling while maintaining aspect ratio
             canvas.style.transform = 'scale(' + scale + ')';
-            canvas.style.transformOrigin = 'top left';
-        });
+            
+            // Center the canvas
+            canvas.style.marginLeft = '50%';
+            canvas.style.transform = 'scale(' + scale + ') translateX(-50%)';
+            
+            // Store scale for potential use in other calculations
+            canvas.dataset.scale = scale;
+        }
+
+        // Initial adjustment
+        document.addEventListener('DOMContentLoaded', adjustCanvasSize);
+        
+        // Adjust on window resize
+        window.addEventListener('resize', adjustCanvasSize);
     </script>
 </body>
 </html>`;
