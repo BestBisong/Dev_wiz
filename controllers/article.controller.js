@@ -74,7 +74,7 @@ exports.createArticle = async (req, res) => {
       // Check if slug exists and make it unique
     const existingArticle = await Article.findOne({ slug });
     if (existingArticle) {
-      slug = `${slug}-${Date.now()}`; 
+    slug = ` ${slug}-${Math.random().toString(36).substring(2, 5)}`;
     }
 
     // Create article in DB
