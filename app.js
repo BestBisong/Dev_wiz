@@ -72,6 +72,7 @@ configureStatic('/static', path.join(__dirname, 'public'));
 // Register routes
 app.use('/layouts', require('./routes/layout.routes'));
 app.use('/', require('./routes/imageUpload.route'));
+app.use('/articles', require('./routes/article.routes'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
