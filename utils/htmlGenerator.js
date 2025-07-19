@@ -38,40 +38,57 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     const cssRules = [];
     const htmlElements = [];
 
-    elements.forEach((element, index) => {
-        const { id, type, styles = {}, position = {x: 0, y: 0}, content = '', imageUrl = '' } = element;
+    elements.forEach((element) => {
+        const { id, type = 'div', styles = {}, position = {x: 0, y: 0}, content = '', imageUrl = '' } = element;
         
-        // Generate CSS
-        cssRules.push(`
-        #element-${id} {
-            left: ${position.x}px;
-            top: ${position.y}px;
-            ${Object.entries(styles).map(([key, value]) => 
-                `${key.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${value}${typeof value === 'number' ? 'px' : ''};`
-                .join('\n')}
-        }`);
+        // Generate CSS - safer implementation
+        let cssRule = `#element-${id} {\n`;
+        cssRule += `    left: ${position.x}px;\n`;
+        cssRule += `    top: ${position.y}px;\n`;
+        
+        // Handle styles safely
+        Object.entries(styles).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                const cssProperty = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                const cssValue = typeof value === 'number' ? `${value}px` : value;
+                cssRule += `    ${cssProperty}: ${cssValue};\n`;
+            }
+        });
+        
+        cssRule += `}\n`;
+        cssRules.push(cssRule);
 
-        // Generate HTML
-        if (type?.toLowerCase() === 'image') {
-            const imgSrc = imageUrl.startsWith('http') ? imageUrl 
-                        : imageUrl.startsWith('/') ? `${baseUrl}${imageUrl}`
+        // Generate HTML - safer implementation
+        let elementHtml = '';
+        if (String(type).toLowerCase() === 'image') {
+            let imgSrc = '';
+            if (imageUrl) {
+                if (imageUrl.startsWith('http')) {
+                    imgSrc = imageUrl;
+                } else {
+                    imgSrc = imageUrl.startsWith('/') 
+                        ? `${baseUrl}${imageUrl}`
                         : `${baseUrl}/${imageUrl}`;
+                }
+            }
             
-            htmlElements.push(`
+            elementHtml = `
             <div id="element-${id}" class="canvas-element">
                 <img src="${imgSrc}" alt="Design Image" 
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'padding:10px;background:#eee\\'>Image not available</div>'">
-            </div>`);
+                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\"padding:10px;background:#eee\">Image not available</div>'">
+            </div>`;
         } else {
-            htmlElements.push(`
+            elementHtml = `
             <div id="element-${id}" class="canvas-element">
                 ${content || 'Sample content'}
-            </div>`);
+            </div>`;
         }
+        
+        htmlElements.push(elementHtml);
     });
 
-    return {
-        html: `<!DOCTYPE html>
+    // Final HTML with proper encoding
+    const html = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -87,7 +104,10 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
         ${htmlElements.join('\n')}
     </div>
 </body>
-</html>`,
+</html>`;
+
+    return {
+        html: html,
         css: baseStyles + cssRules.join('\n')
     };
 }
