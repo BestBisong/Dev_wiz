@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const articleSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true,
     trim: true
   },
   content: {
@@ -13,11 +12,9 @@ const articleSchema = new mongoose.Schema({
   layout: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Layout',
-    required: true
   },
   slug: {
     type: String,
-    required: true,
     unique: true
   },
   isPublished: {
