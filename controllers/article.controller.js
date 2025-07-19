@@ -1,24 +1,77 @@
 const Article = require('../models/article.model');
-const Layout = require('../models/layout.model');
-const mongoose = require('mongoose');
+const { Document, Paragraph, TextRun, HeadingLevel, Packer } = require("docx");
+const { parse } = require('node-html-parser');
 const slugify = require('slugify');
 const { sanitize } = require('../utils/sanitizer');
-const cache = require('../services/cache.service');
-const { Document, Paragraph, TextRun, HeadingLevel, Packer } = require("docx");
 
-const CACHE_DURATION = 3600; // 1 hour cache
+// Helper: Convert HTML to docx Paragraphs with styling
+function htmlToDocxParagraphs(html) {
+  if (!html) return [new Paragraph({ text: '' })];
+  
+  const root = parse(html);
+  const paragraphs = [];
+
+  root.childNodes.forEach((node) => {
+    if (node.nodeType === 3) { // Text node
+      if (node.textContent.trim()) {
+        paragraphs.push(new Paragraph({ children: [new TextRun(node.textContent)] }));
+      }
+    } else if (node.tagName === 'P' || node.tagName === 'DIV') {
+      const children = [];
+      let alignment = 'left';
+
+      // Check for alignment (left/right/center/justify)
+      const style = node.getAttribute('style') || '';
+      if (style.includes('text-align:center')) alignment = 'center';
+      else if (style.includes('text-align:right')) alignment = 'right';
+      else if (style.includes('text-align:justify')) alignment = 'both';
+
+      // Process child nodes (spans, strong, em, etc.)
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === 3) { // Text node
+          if (child.textContent.trim()) {
+            children.push(new TextRun(child.textContent));
+          }
+        } else if (child.tagName === 'SPAN' || child.tagName === 'FONT') {
+          const textRunOptions = { text: child.textContent };
+          const childStyle = child.getAttribute('style') || '';
+
+          // Handle color
+          const colorMatch = childStyle.match(/color:\s*(#[0-9a-f]+|rgb\([^)]+\)|rgba\([^)]+\))/i);
+          if (colorMatch) textRunOptions.color = colorMatch[1].replace('#', '');
+
+          // Handle font styles
+          if (childStyle.includes('font-weight:bold')) textRunOptions.bold = true;
+          if (childStyle.includes('font-style:italic')) textRunOptions.italics = true;
+          if (childStyle.includes('text-decoration:underline')) textRunOptions.underline = {};
+
+          children.push(new TextRun(textRunOptions));
+        } else if (child.tagName === 'STRONG' || child.tagName === 'B') {
+          children.push(new TextRun({ text: child.textContent, bold: true }));
+        } else if (child.tagName === 'EM' || child.tagName === 'I') {
+          children.push(new TextRun({ text: child.textContent, italics: true }));
+        }
+      });
+
+      if (children.length > 0) {
+        paragraphs.push(new Paragraph({ children, alignment }));
+      }
+    }
+  });
+
+  return paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: '' })];
+}
 
 // Create and publish article
 exports.createArticle = async (req, res) => {
   try {
     const { title, content, layoutId, metaTitle, metaDescription, keywords, styles } = req.body;
-    
 
     // Create slug and sanitize content
     const slug = slugify(title, { lower: true, strict: true });
     const sanitizedContent = sanitize(content);
 
-    // Create article
+    // Create article in DB
     const article = await Article.create({
       title: sanitize(title),
       content: sanitizedContent,
@@ -29,7 +82,7 @@ exports.createArticle = async (req, res) => {
       metaTitle: metaTitle ? sanitize(metaTitle) : undefined,
       metaDescription: metaDescription ? sanitize(metaDescription) : undefined,
       keywords: keywords ? keywords.map(k => sanitize(k)) : [],
-      styles:styles
+      styles: styles
     });
 
     // Generate public URL
@@ -40,45 +93,37 @@ exports.createArticle = async (req, res) => {
       sections: [{
         properties: {},
         children: [
+          // Title (centered)
           new Paragraph({
             text: title,
             heading: HeadingLevel.HEADING_1,
-            spacing: {
-              after: 200,
-            },
+            alignment: 'center',
+            spacing: { after: 200 },
           }),
+          // Publish date
           new Paragraph({
             children: [
               new TextRun({
-                text: "Published on: " + new Date().toLocaleDateString(),
+                text: `Published on: ${new Date().toLocaleDateString()}`,
                 bold: true,
               }),
             ],
           }),
+          // Content (converted from HTML)
+          ...htmlToDocxParagraphs(sanitizedContent),
+          // Article URL
           new Paragraph({
-            text: sanitizedContent,
-            spacing: {
-              line: 276, // 1.15 line spacing
-            },
-          }),
-          new Paragraph({
-            text: "Article URL: " + articleUrl,
-            spacing: {
-              before: 200,
-            },
+            text: `Article URL: ${articleUrl}`,
+            spacing: { before: 200 },
           }),
         ],
       }],
     });
 
-    // Generate the Word document buffer
+    // Generate and send the document
     const buffer = await Packer.toBuffer(doc);
-
-    // Set response headers for file download
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.docx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-
-    // Send the document
     res.status(201).send(buffer);
 
   } catch (error) {
