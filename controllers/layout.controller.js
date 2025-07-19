@@ -11,53 +11,37 @@ class CanvasController {
                 return res.status(400).json({ error: 'Elements must be an array.' });
             }
 
-            // Generate HTML and CSS
             const { html } = generateHTMLAndCSS(elements);
-
-            // Create exports directory if it doesn't exist
-            const outputDir = path.join(__dirname, '../exports');
-            if (!fs.existsSync(outputDir)) {
-                fs.mkdirSync(outputDir, { recursive: true });
-            }
-
-            // Save file
             const fileName = `canvas-export-${Date.now()}.html`;
-            const filePath = path.join(outputDir, fileName);
-            fs.writeFileSync(filePath, html, { encoding: 'utf8' });
 
-            // Respond with download URL
-            res.json({
-                success: true,
-                message: 'Canvas exported successfully.',
-                downloadUrl: `/exports/${fileName}`,
-                fileName: fileName
-            });
-
-        } catch (err) {
-            console.error('Export Error:', err);
-            next(err);
-        }
-    }
-
-    // Add this method if you want direct file download endpoint
-    static async downloadExport(req, res, next) {
-        try {
-            const { filename } = req.params;
-            const filePath = path.join(__dirname, '../exports', filename);
-
-            if (!fs.existsSync(filePath)) {
-                return res.status(404).json({ error: 'File not found' });
+            // Validate HTML first
+            if (!html || typeof html !== 'string' || html.length < 10) {
+                throw new Error('Generated HTML is invalid');
             }
 
-            res.download(filePath, filename, (err) => {
+            // Option 1: Direct download with proper headers
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            res.setHeader('Content-Length', Buffer.byteLength(html, 'utf8'));
+            res.send(html);
+
+            // Option 2: If you want to save to file AND download
+            /*
+            const filePath = path.join(__dirname, '../exports', fileName);
+            fs.writeFileSync(filePath, html, { encoding: 'utf8' });
+            
+            res.download(filePath, fileName, (err) => {
                 if (err) {
-                    console.error('Download Error:', err);
+                    console.error('Download failed:', err);
+                    fs.unlinkSync(filePath); // Clean up
                     next(err);
                 }
             });
+            */
+
         } catch (err) {
-            console.error('Download Error:', err);
-            next(err);
+            console.error('Export Error:', err);
+            next(new Error(`Failed to export canvas: ${err.message}`));
         }
     }
 }
