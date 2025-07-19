@@ -3,7 +3,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
         throw new Error('Elements must be an array');
     }
 
-    // Simplified responsive container
+    // Enhanced base styles with default form styling
     const baseStyles = `
     * {
         box-sizing: border-box;
@@ -33,21 +33,50 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
         max-width: 100%;
         height: auto;
         display: block;
+    }
+    input, textarea, button {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: inherit;
+        font-size: inherit;
+    }
+    input:focus, textarea:focus {
+        outline: none;
+        border-color: #1e31e3;
     }`;
 
     const cssRules = [];
     const htmlElements = [];
 
     elements.forEach((element) => {
-        const { id, type = 'div', styles = {}, position = {x: 0, y: 0}, content = '', imageUrl = '' } = element;
+        const { 
+            id, 
+            type = 'div', 
+            label = '', 
+            styles = {}, 
+            position = {x: 0, y: 0}, 
+            content = '', 
+            imageUrl = '',
+            customText = ''
+        } = element;
         
-        // Generate CSS - safer implementation
+        // Generate CSS
         let cssRule = `#element-${id} {\n`;
         cssRule += `    left: ${position.x}px;\n`;
         cssRule += `    top: ${position.y}px;\n`;
         
-        // Handle styles safely
-        Object.entries(styles).forEach(([key, value]) => {
+        // Apply styles with defaults
+        const defaultStyles = {
+            color: '#000000',
+            fontSize: '16px',
+            backgroundColor: 'transparent',
+            width: 'auto',
+            height: 'auto',
+            ...styles // User-defined styles override defaults
+        };
+        
+        Object.entries(defaultStyles).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
                 const cssProperty = key.replace(/([A-Z])/g, '-$1').toLowerCase();
                 const cssValue = typeof value === 'number' ? `${value}px` : value;
@@ -55,40 +84,62 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
             }
         });
         
-        cssRule += `}\n`;
-        cssRules.push(cssRule);
+        cssRules.push(cssRule + '}');
 
-        // Generate HTML - safer implementation
+        // Generate HTML based on element type
         let elementHtml = '';
-        if (String(type).toLowerCase() === 'image') {
-            let imgSrc = '';
-            if (imageUrl) {
-                if (imageUrl.startsWith('http')) {
-                    imgSrc = imageUrl;
-                } else {
-                    imgSrc = imageUrl.startsWith('/') 
-                        ? `${baseUrl}${imageUrl}`
-                        : `${baseUrl}/${imageUrl}`;
+        const elementContent = customText || content;
+        
+        switch (String(type).toLowerCase()) {
+            case 'input':
+                elementHtml = `
+                <div id="element-${id}" class="canvas-element">
+                    <input type="text" value="${elementContent || ''}" placeholder="${label || 'Input field'}" />
+                </div>`;
+                break;
+                
+            case 'textarea':
+                elementHtml = `
+                <div id="element-${id}" class="canvas-element">
+                    <textarea placeholder="${label || 'Text area'}">${elementContent || ''}</textarea>
+                </div>`;
+                break;
+                
+            case 'button':
+                elementHtml = `
+                <div id="element-${id}" class="canvas-element">
+                    <button>${elementContent || label || 'Button'}</button>
+                </div>`;
+                break;
+                
+            case 'image':
+                let imgSrc = '';
+                if (imageUrl) {
+                    imgSrc = imageUrl.startsWith('http') 
+                        ? imageUrl 
+                        : imageUrl.startsWith('/') 
+                            ? `${baseUrl}${imageUrl}`
+                            : `${baseUrl}/${imageUrl}`;
                 }
-            }
-            
-            elementHtml = `
-            <div id="element-${id}" class="canvas-element">
-                <img src="${imgSrc}" alt="Design Image" 
-                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\"padding:10px;background:#eee\">Image not available</div>'">
-            </div>`;
-        } else {
-            elementHtml = `
-            <div id="element-${id}" class="canvas-element">
-                ${content || 'Sample content'}
-            </div>`;
+                elementHtml = `
+                <div id="element-${id}" class="canvas-element">
+                    <img src="${imgSrc}" alt="${label || 'Image'}" 
+                         onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\"padding:10px;background:#eee\">Image not available</div>'">
+                </div>`;
+                break;
+                
+            default:
+                elementHtml = `
+                <div id="element-${id}" class="canvas-element">
+                    ${elementContent || label || 'Content'}
+                </div>`;
         }
         
         htmlElements.push(elementHtml);
     });
 
-    // Final HTML with proper encoding
-    const html = `<!DOCTYPE html>
+    return {
+        html: `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -104,10 +155,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
         ${htmlElements.join('\n')}
     </div>
 </body>
-</html>`;
-
-    return {
-        html: html,
+</html>`,
         css: baseStyles + cssRules.join('\n')
     };
 }
