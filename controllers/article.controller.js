@@ -68,7 +68,7 @@ exports.createArticle = async (req, res) => {
     const { title, content, layoutId, metaTitle, metaDescription, keywords, styles } = req.body;
 
     // Create slug and sanitize content
-    const slug = slugify(title, { lower: true, strict: true });
+   let slug = slugify(title, { lower: true, strict: true });
     const sanitizedContent = sanitize(content);
 
       // Check if slug exists and make it unique
