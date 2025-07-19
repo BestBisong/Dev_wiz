@@ -9,6 +9,7 @@ const app = express();
 // Create necessary directories if they don't exist
 const uploadDir = path.join(__dirname, 'uploads/images');
 const exportDir = path.join(__dirname, 'exports');
+
 [uploadDir, exportDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -19,8 +20,9 @@ const exportDir = path.join(__dirname, 'exports');
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true,
+    exposedHeaders: ['Content-Disposition']
 }));
 
 // Body parser with increased limit
@@ -33,27 +35,39 @@ connectDB().catch(err => {
     process.exit(1);
 });
 
-// Static files configurations
-app.use('/images', express.static(uploadDir, {
-    setHeaders: (res, filePath) => {
-        const mimeType = express.static.mime.lookup(filePath);
-        if (mimeType.startsWith('image/')) {
-            res.set('Cache-Control', 'public, max-age=31536000, immutable');
-        }
-    }
-}));
+// Configure static file serving with proper MIME types and caching
+const configureStatic = (route, dir) => {
+    app.use(route, express.static(dir, {
+        setHeaders: (res, filePath) => {
+            const ext = path.extname(filePath).toLowerCase().substring(1);
+            const mimeTypes = {
+                jpg: 'image/jpeg',
+                jpeg: 'image/jpeg',
+                png: 'image/png',
+                gif: 'image/gif',
+                webp: 'image/webp',
+                svg: 'image/svg+xml',
+                html: 'text/html',
+                css: 'text/css',
+                js: 'application/javascript'
+            };
 
-// Serve exported canvas files
-app.use('/exports', express.static(exportDir, {
-    setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
-            res.set('Content-Type', 'text/html');
-        }
-    }
-}));
+            if (mimeTypes[ext]) {
+                res.set('Content-Type', mimeTypes[ext]);
+            }
 
-// Static assets
-app.use('/static', express.static(path.join(__dirname, 'public')));
+            // Cache images for 1 year (immutable)
+            if (ext.match(/(jpg|jpeg|png|gif|webp|svg)$/)) {
+                res.set('Cache-Control', 'public, max-age=31536000, immutable');
+            }
+        }
+    }));
+};
+
+// Set up static file serving
+configureStatic('/images', uploadDir);
+configureStatic('/exports', exportDir);
+configureStatic('/static', path.join(__dirname, 'public'));
 
 // Register routes
 app.use('/layouts', require('./routes/layout.routes'));
@@ -66,15 +80,26 @@ app.get('/health', (req, res) => {
         directories: {
             uploads: uploadDir,
             exports: exportDir
-        }
+        },
+        memoryUsage: process.memoryUsage()
     });
+});
+
+// Test image endpoint
+app.get('/test-image', (req, res) => {
+    const testImagePath = path.join(__dirname, 'test-image.jpg');
+    if (fs.existsSync(testImagePath)) {
+        res.sendFile(testImagePath);
+    } else {
+        res.status(404).json({ error: 'Test image not found' });
+    }
 });
 
 // Enhanced error handling
 app.use((err, req, res, next) => {
     console.error(`[${new Date().toISOString()}] Error:`, err.stack);
     
-    // Handle multer errors specifically
+    // Handle file-related errors
     if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ 
             success: false,
@@ -85,13 +110,14 @@ app.use((err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_TYPE') {
         return res.status(415).json({ 
             success: false,
-            error: 'Only image files are allowed (JPEG, PNG, GIF)' 
+            error: 'Only image files are allowed (JPEG, PNG, GIF, WEBP, SVG)' 
         });
     }
 
     res.status(500).json({ 
         success: false,
-        error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
     });
 });
 
@@ -104,6 +130,7 @@ const server = app.listen(PORT, () => {
     * Upload directory: ${uploadDir}  *
     * Export directory: ${exportDir}  *
     * Health check: http://localhost:${PORT}/health *
+    * Test image: http://localhost:${PORT}/test-image *
     ****************************************
     `);
 });
@@ -112,6 +139,15 @@ const server = app.listen(PORT, () => {
 process.on('unhandledRejection', (err) => {
     console.error('Unhandled Rejection:', err);
     server.close(() => process.exit(1));
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('Server terminated');
+        process.exit(0);
+    });
 });
 
 module.exports = app;
