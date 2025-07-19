@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { generateHTMLAndCSS } = require('../utils/htmlGenerator'); // adjust the path if needed
+const { generateHTMLAndCSS } = require('../utils/htmlGenerator');
 
 class CanvasController {
     static async exportCanvas(req, res, next) {
@@ -14,26 +14,49 @@ class CanvasController {
             // Generate HTML and CSS
             const { html } = generateHTMLAndCSS(elements);
 
-            // Optional: Save to file (e.g., for download later)
+            // Create exports directory if it doesn't exist
             const outputDir = path.join(__dirname, '../exports');
             if (!fs.existsSync(outputDir)) {
-                fs.mkdirSync(outputDir);
+                fs.mkdirSync(outputDir, { recursive: true });
             }
 
-            const fileName = `canvas-${Date.now()}.html`;
+            // Save file
+            const fileName = `canvas-export-${Date.now()}.html`;
             const filePath = path.join(outputDir, fileName);
+            fs.writeFileSync(filePath, html, { encoding: 'utf8' });
 
-            fs.writeFileSync(filePath, html, 'utf8');
-
-            // Send back the file URL or HTML directly
+            // Respond with download URL
             res.json({
+                success: true,
                 message: 'Canvas exported successfully.',
-                fileUrl: `/exports/${fileName}`, // Assumes /exports is a static folder served by Express
-                htmlPreview: html // Optional: Return the HTML directly for preview in frontend
+                downloadUrl: `/exports/${fileName}`,
+                fileName: fileName
             });
 
         } catch (err) {
             console.error('Export Error:', err);
+            next(err);
+        }
+    }
+
+    // Add this method if you want direct file download endpoint
+    static async downloadExport(req, res, next) {
+        try {
+            const { filename } = req.params;
+            const filePath = path.join(__dirname, '../exports', filename);
+
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ error: 'File not found' });
+            }
+
+            res.download(filePath, filename, (err) => {
+                if (err) {
+                    console.error('Download Error:', err);
+                    next(err);
+                }
+            });
+        } catch (err) {
+            console.error('Download Error:', err);
             next(err);
         }
     }
