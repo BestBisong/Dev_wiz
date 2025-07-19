@@ -71,6 +71,12 @@ exports.createArticle = async (req, res) => {
     const slug = slugify(title, { lower: true, strict: true });
     const sanitizedContent = sanitize(content);
 
+      // Check if slug exists and make it unique
+    const existingArticle = await Article.findOne({ slug });
+    if (existingArticle) {
+      slug = `${slug}-${Date.now()}`; 
+    }
+
     // Create article in DB
     const article = await Article.create({
       title: sanitize(title),
