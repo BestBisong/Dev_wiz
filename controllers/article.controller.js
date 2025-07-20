@@ -4,41 +4,30 @@ const { parse } = require('node-html-parser');
 const slugify = require('slugify');
 const { sanitize } = require('../utils/sanitizer');
 
-// Color palette mapping from your screenshot
+// Color palette mapping
 const COLOR_PALETTE = {
-  // First row (0 • 0 •)
   '000000': 'Black',
   'FFFFFF': 'White',
   'FF0000': 'Red',
   '00FF00': 'Green',
-  
-  // Second row (• • • •)
   '0000FF': 'Blue',
   'FFFF00': 'Yellow',
   'FF00FF': 'Magenta',
   '00FFFF': 'Cyan'
 };
 
-// Enhanced color normalization with palette support
 function normalizeColor(color) {
-  if (!color) return '000000'; // Default to black
-  
-  // Check if it's already a valid 3/6 digit hex
+  if (!color) return '000000';
   const hexMatch = color.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hexMatch) {
     const hex = hexMatch[1];
-    return hex.length === 3 ? 
-      hex.split('').map(c => c + c).join('').toUpperCase() : 
-      hex.toUpperCase();
+    return hex.length === 3 ? hex.split('').map(c => c + c).join('').toUpperCase() : hex.toUpperCase();
   }
-  
-  // Check if it's a named color from our palette
   const paletteColor = Object.entries(COLOR_PALETTE).find(
     ([hex, name]) => name.toLowerCase() === color.toLowerCase()
   );
   if (paletteColor) return paletteColor[0];
-  
-  // Handle rgb/rgba colors
+
   const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
   if (rgbMatch) {
     return [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
@@ -46,11 +35,10 @@ function normalizeColor(color) {
       .join('')
       .toUpperCase();
   }
-  
-  return '000000'; // Fallback to black
+
+  return '000000';
 }
 
-// Enhanced HTML to DOCX converter with palette support
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
     if (!html) return [new Paragraph({ text: '' })];
@@ -65,7 +53,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
     };
 
     root.childNodes.forEach((node) => {
-      if (node.nodeType === 3) { // Text node
+      if (node.nodeType === 3) {
         if (node.textContent.trim()) {
           paragraphs.push(new Paragraph({
             children: [new TextRun({
@@ -82,12 +70,10 @@ function htmlToDocxParagraphs(html, styles = {}) {
         let alignment = AlignmentType.LEFT;
         const style = node.getAttribute('style') || '';
 
-        // Handle alignment
         if (style.includes('text-align:center')) alignment = AlignmentType.CENTER;
         else if (style.includes('text-align:right')) alignment = AlignmentType.RIGHT;
         else if (style.includes('text-align:justify')) alignment = AlignmentType.JUSTIFIED;
 
-        // Process child nodes with palette support
         node.childNodes.forEach((child) => {
           if (child.nodeType === 3) {
             if (child.textContent.trim()) {
@@ -106,7 +92,6 @@ function htmlToDocxParagraphs(html, styles = {}) {
               color: defaultStyles.color
             };
 
-            // Handle inline styles with palette colors
             if (child.getAttribute('style')) {
               const childStyle = child.getAttribute('style');
               if (childStyle.includes('color:')) {
@@ -145,7 +130,6 @@ function htmlToDocxParagraphs(html, styles = {}) {
   }
 }
 
-// Create and publish article (rest remains the same)
 exports.createArticle = async (req, res) => {
   try {
     const { title, content, styles } = req.body;
@@ -156,7 +140,6 @@ exports.createArticle = async (req, res) => {
       });
     }
 
-    // Generate unique slug
     let slug = slugify(title, { lower: true, strict: true });
     let attempts = 0;
     while (attempts < 5) {
@@ -166,7 +149,6 @@ exports.createArticle = async (req, res) => {
       attempts++;
     }
 
-    // Create article
     const article = await Article.create({
       title: sanitize(title),
       content: sanitize(content),
@@ -175,13 +157,12 @@ exports.createArticle = async (req, res) => {
       publishedAt: new Date(),
       styles: {
         ...styles,
-        color: normalizeColor(styles?.color) // Ensure color is in palette
+        color: normalizeColor(styles?.color)
       }
     });
 
     const articleUrl = `${req.protocol}://${req.get('host')}/articles/${article.slug}`;
 
-    // Generate DOCX with palette colors
     const doc = new Document({
       styles: {
         paragraphStyles: [{
@@ -190,7 +171,7 @@ exports.createArticle = async (req, res) => {
           run: {
             font: styles?.fontFamily || "Calibri",
             size: styles?.fontSize || "24pt",
-            color: normalizeColor(styles?.color) // Use normalized color
+            color: normalizeColor(styles?.color)
           },
           paragraph: {
             spacing: { line: (styles?.lineHeight || 1.5) * 240 }
@@ -207,7 +188,7 @@ exports.createArticle = async (req, res) => {
           }),
           ...htmlToDocxParagraphs(content, {
             ...styles,
-            color: normalizeColor(styles?.color) // Pass normalized color
+            color: normalizeColor(styles?.color)
           }),
           new Paragraph({
             text: `Read online: ${articleUrl}`,
@@ -220,15 +201,14 @@ exports.createArticle = async (req, res) => {
 
     const buffer = await Packer.toBuffer(doc);
 
-    res.status(201).json({
-      status: 'success',
-      data: {
-        download: buffer.toString('base64'),
-        articleUrl,
-        articleId: article._id,
-        colorPalette: COLOR_PALETTE // Return available colors
-      }
+    
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${slug}.docx"`,
+      'Content-Length': buffer.length
     });
+
+    res.send(buffer);
 
   } catch (error) {
     console.error('Error:', error);
