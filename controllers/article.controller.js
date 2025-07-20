@@ -4,7 +4,53 @@ const { parse } = require('node-html-parser');
 const slugify = require('slugify');
 const { sanitize } = require('../utils/sanitizer');
 
-// Enhanced HTML to DOCX converter with styling preservation
+// Color palette mapping from your screenshot
+const COLOR_PALETTE = {
+  // First row (0 • 0 •)
+  '000000': 'Black',
+  'FFFFFF': 'White',
+  'FF0000': 'Red',
+  '00FF00': 'Green',
+  
+  // Second row (• • • •)
+  '0000FF': 'Blue',
+  'FFFF00': 'Yellow',
+  'FF00FF': 'Magenta',
+  '00FFFF': 'Cyan'
+};
+
+// Enhanced color normalization with palette support
+function normalizeColor(color) {
+  if (!color) return '000000'; // Default to black
+  
+  // Check if it's already a valid 3/6 digit hex
+  const hexMatch = color.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    return hex.length === 3 ? 
+      hex.split('').map(c => c + c).join('').toUpperCase() : 
+      hex.toUpperCase();
+  }
+  
+  // Check if it's a named color from our palette
+  const paletteColor = Object.entries(COLOR_PALETTE).find(
+    ([hex, name]) => name.toLowerCase() === color.toLowerCase()
+  );
+  if (paletteColor) return paletteColor[0];
+  
+  // Handle rgb/rgba colors
+  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (rgbMatch) {
+    return [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
+      .map(n => parseInt(n).toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase();
+  }
+  
+  return '000000'; // Fallback to black
+}
+
+// Enhanced HTML to DOCX converter with palette support
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
     if (!html) return [new Paragraph({ text: '' })];
@@ -14,7 +60,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
     const defaultStyles = {
       fontFamily: styles.fontFamily || 'Calibri',
       fontSize: styles.fontSize || '22pt',
-      color: styles.color || '000000',
+      color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight || 1.5
     };
 
@@ -41,7 +87,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
         else if (style.includes('text-align:right')) alignment = AlignmentType.RIGHT;
         else if (style.includes('text-align:justify')) alignment = AlignmentType.JUSTIFIED;
 
-        // Process child nodes
+        // Process child nodes with palette support
         node.childNodes.forEach((child) => {
           if (child.nodeType === 3) {
             if (child.textContent.trim()) {
@@ -59,6 +105,17 @@ function htmlToDocxParagraphs(html, styles = {}) {
               size: defaultStyles.fontSize,
               color: defaultStyles.color
             };
+
+            // Handle inline styles with palette colors
+            if (child.getAttribute('style')) {
+              const childStyle = child.getAttribute('style');
+              if (childStyle.includes('color:')) {
+                const colorMatch = childStyle.match(/color:\s*(#[0-9a-f]+|rgb\([^)]+\)|rgba\([^)]+\)|\w+)/i);
+                if (colorMatch) {
+                  textRunOptions.color = normalizeColor(colorMatch[1]);
+                }
+              }
+            }
 
             if (['STRONG', 'B'].includes(child.tagName)) textRunOptions.bold = true;
             if (['EM', 'I'].includes(child.tagName)) textRunOptions.italics = true;
@@ -88,7 +145,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
   }
 }
 
-// Create and publish article with both DOCX and URL
+// Create and publish article (rest remains the same)
 exports.createArticle = async (req, res) => {
   try {
     const { title, content, styles } = req.body;
@@ -116,12 +173,15 @@ exports.createArticle = async (req, res) => {
       slug,
       isPublished: true,
       publishedAt: new Date(),
-      styles
+      styles: {
+        ...styles,
+        color: normalizeColor(styles?.color) // Ensure color is in palette
+      }
     });
 
     const articleUrl = `${req.protocol}://${req.get('host')}/articles/${article.slug}`;
 
-    // Generate DOCX with preserved styling
+    // Generate DOCX with palette colors
     const doc = new Document({
       styles: {
         paragraphStyles: [{
@@ -130,7 +190,7 @@ exports.createArticle = async (req, res) => {
           run: {
             font: styles?.fontFamily || "Calibri",
             size: styles?.fontSize || "24pt",
-            color: styles?.color || "000000"
+            color: normalizeColor(styles?.color) // Use normalized color
           },
           paragraph: {
             spacing: { line: (styles?.lineHeight || 1.5) * 240 }
@@ -145,7 +205,10 @@ exports.createArticle = async (req, res) => {
             alignment: AlignmentType.CENTER,
             spacing: { after: 400 }
           }),
-          ...htmlToDocxParagraphs(content, styles),
+          ...htmlToDocxParagraphs(content, {
+            ...styles,
+            color: normalizeColor(styles?.color) // Pass normalized color
+          }),
           new Paragraph({
             text: `Read online: ${articleUrl}`,
             alignment: AlignmentType.CENTER,
@@ -157,13 +220,13 @@ exports.createArticle = async (req, res) => {
 
     const buffer = await Packer.toBuffer(doc);
 
-    // Return both DOCX and URL
     res.status(201).json({
       status: 'success',
       data: {
         download: buffer.toString('base64'),
         articleUrl,
-        articleId: article._id
+        articleId: article._id,
+        colorPalette: COLOR_PALETTE // Return available colors
       }
     });
 
