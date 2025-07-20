@@ -29,7 +29,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     position: relative;
     width: 100%;
     max-width: 1200px;
-    min-height: 90vh;
+    min-height: 100vh;
     margin: 0 auto;
     background-color: var(--white);
     box-shadow: var(--shadow);
@@ -40,6 +40,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
   .canvas-element {
     position: absolute;
     transform: translate(0, 0);
+    min-height: auto ;
   }`;
 
   const cssRules = [];
