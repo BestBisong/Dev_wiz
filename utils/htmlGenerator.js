@@ -1,10 +1,8 @@
 function generateHTMLAndCSS(elements, baseUrl = '') {
-  // Validate input
   if (!Array.isArray(elements)) {
     throw new Error('Elements must be an array');
   }
 
-  // Base styles with proper positioning context
   const baseStyles = `
   :root {
     --primary-color: #1e31e3;
@@ -14,13 +12,9 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     --white: #ffffff;
     --shadow: 0 2px 10px rgba(0,0,0,0.1);
   }
-  
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-  
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
     font-family: 'Segoe UI', Arial, sans-serif;
     color: var(--text-color);
@@ -30,7 +24,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     position: relative;
     min-height: 1000vh;
   }
-  
+
   .canvas-container {
     position: relative;
     width: 100%;
@@ -42,18 +36,17 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     padding: 30px;
     border-radius: 8px;
   }
-  
+
   .canvas-element {
     position: absolute;
-    transform: translate(0, 0); /* Ensures precise positioning */
+    transform: translate(0, 0);
   }`;
 
   const cssRules = [];
   const htmlElements = [];
 
-  // Process each element with all collected attributes
   elements.forEach((element) => {
-    const { 
+    const {
       id,
       type = 'div',
       label = '',
@@ -67,7 +60,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
       fields = [],
       columns = [],
       links = [],
-      // Additional collected attributes
+      mapUrl = '',
       placeholder = '',
       required = false,
       options = [],
@@ -75,17 +68,14 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
       logo = {},
       socialIcons = [],
       copyrightText = '',
-      // Style-specific attributes
       backgroundColor,
       textColor,
       borderColor,
       borderRadius,
       fontSize,
       fontWeight,
-      // etc... add all attributes you collect
     } = element;
 
-    // Generate CSS with all positioning and styling
     let cssRule = `#element-${id} {\n`;
     cssRule += `  position: absolute;\n`;
     cssRule += `  left: ${position.x}px;\n`;
@@ -93,7 +83,6 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     cssRule += `  width: ${typeof size.width === 'number' ? size.width + 'px' : size.width};\n`;
     cssRule += `  height: ${typeof size.height === 'number' ? size.height + 'px' : size.height};\n`;
 
-    // Apply all collected styles
     const styleProperties = {
       ...styles,
       backgroundColor: backgroundColor || styles.backgroundColor,
@@ -102,83 +91,69 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
       borderRadius: borderRadius || styles.borderRadius,
       fontSize: fontSize || styles.fontSize,
       fontWeight: fontWeight || styles.fontWeight,
-      // Add all other style mappings
     };
 
     Object.entries(styleProperties).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
-        const cssProperty = key
-          .replace(/([A-Z])/g, '-$1')
-          .toLowerCase();
-        
+        const cssProperty = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+
         let cssValue = value;
-        
-        // Handle numeric values (add px where appropriate)
-        if (typeof value === 'number' && 
-            !['zIndex', 'opacity', 'fontWeight', 'lineHeight', 'flex'].includes(key)) {
+
+        if (typeof value === 'number' && !['zIndex', 'opacity', 'fontWeight', 'lineHeight', 'flex'].includes(key)) {
           cssValue = `${value}px`;
         }
-        
-        // Handle font weights
+
         if (key === 'fontWeight' && typeof value === 'string') {
-          cssValue = value.toLowerCase() === 'bold' ? '700' : 
-                    value.toLowerCase() === 'normal' ? '400' : value;
+          cssValue = value.toLowerCase() === 'bold' ? '700' :
+                     value.toLowerCase() === 'normal' ? '400' : value;
         }
-        
+
         cssRule += `  ${cssProperty}: ${cssValue};\n`;
       }
     });
 
     cssRules.push(cssRule + '}');
 
-    // Generate HTML using all collected attributes
+    // HTML Generation with IDs in ALL components
     let elementHtml = '';
     const elementContent = customText || content || '';
 
     switch (type.toLowerCase()) {
+      case 'map':
+        elementHtml = `
+        <div id="element-${id}" class="canvas-element map-element">
+          <iframe 
+            id="map-${id}"
+            src="${mapUrl}" 
+            width="${typeof size.width === 'number' ? size.width + 'px' : size.width}" 
+            height="${typeof size.height === 'number' ? size.height + 'px' : size.height}" 
+            style="border:0;" 
+            allowfullscreen 
+            loading="lazy">
+          </iframe>
+        </div>`;
+        break;
+
       case 'form':
         elementHtml = `
         <div id="element-${id}" class="canvas-element form-element">
-          <form class="form-container">
+          <form id="form-${id}" class="form-container">
             ${label ? `<h3 class="form-title">${label}</h3>` : ''}
             ${fields.map((field, i) => `
               <div class="form-group">
                 <label for="field-${id}-${i}">${field.label || `Field ${i+1}`}</label>
                 ${field.type === 'textarea' ? `
-                  <textarea 
-                    id="field-${id}-${i}" 
-                    name="${field.name || `field-${i}`}"
-                    placeholder="${field.placeholder || placeholder || ''}"
-                    ${field.required || required ? 'required' : ''}
-                  ></textarea>
+                  <textarea id="field-${id}-${i}" name="${field.name || `field-${i}`}" placeholder="${field.placeholder || placeholder}" ${field.required || required ? 'required' : ''}></textarea>
                 ` : field.type === 'select' ? `
-                  <select 
-                    id="field-${id}-${i}"
-                    name="${field.name || `field-${i}`}"
-                    ${field.required || required ? 'required' : ''}
-                  >
-                    ${field.options && field.options.length > 0 ? 
-                      field.options.map(opt => `
-                        <option value="${opt.value || opt}">${opt.label || opt}</option>
-                      `).join('') : 
-                      options.map(opt => `
-                        <option value="${opt.value || opt}">${opt.label || opt}</option>
-                      `).join('')}
+                  <select id="field-${id}-${i}" name="${field.name || `field-${i}`}" ${field.required || required ? 'required' : ''}>
+                    ${(field.options || options).map(opt => `<option value="${opt.value || opt}">${opt.label || opt}</option>`).join('')}
                   </select>
                 ` : `
-                  <input 
-                    type="${field.type || 'text'}"
-                    id="field-${id}-${i}"
-                    name="${field.name || `field-${i}`}"
-                    placeholder="${field.placeholder || placeholder || ''}"
-                    ${field.required || required ? 'required' : ''}
-                  >
+                  <input type="${field.type || 'text'}" id="field-${id}-${i}" name="${field.name || `field-${i}`}" placeholder="${field.placeholder || placeholder}" ${field.required || required ? 'required' : ''}>
                 `}
               </div>
             `).join('')}
-            <button type="submit" class="form-submit">
-              ${buttonText}
-            </button>
+            <button type="submit" class="form-submit" id="submit-${id}">${buttonText}</button>
           </form>
         </div>`;
         break;
@@ -186,20 +161,16 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
       case 'navbar':
         elementHtml = `
         <div id="element-${id}" class="canvas-element navbar-element">
-          <nav class="navbar-container">
+          <nav id="navbar-${id}" class="navbar-container">
             ${logo.text || logo.image ? `
-              <div class="navbar-brand">
-                ${logo.image ? `
-                  <img src="${baseUrl}${logo.image}" alt="${logo.text || 'Logo'}" class="navbar-logo">
-                ` : ''}
-                ${logo.text ? `
-                  <span class="navbar-logo-text">${logo.text}</span>
-                ` : ''}
+              <div class="navbar-brand" id="navbar-brand-${id}">
+                ${logo.image ? `<img src="${baseUrl}${logo.image}" alt="${logo.text || 'Logo'}" class="navbar-logo">` : ''}
+                ${logo.text ? `<span class="navbar-logo-text">${logo.text}</span>` : ''}
               </div>
             ` : ''}
-            <ul class="navbar-links">
+            <ul class="navbar-links" id="navbar-links-${id}">
               ${items.map((item, i) => `
-                <li class="nav-item">
+                <li class="nav-item" id="nav-item-${id}-${i}">
                   <a href="${item.link || '#'}" class="nav-link">
                     ${item.icon ? `<i class="${item.icon}"></i>` : ''}
                     ${item.text || `Link ${i+1}`}
@@ -208,7 +179,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
               `).join('')}
             </ul>
             ${socialIcons.length > 0 ? `
-              <div class="navbar-social">
+              <div class="navbar-social" id="navbar-social-${id}">
                 ${socialIcons.map(icon => `
                   <a href="${icon.link || '#'}" class="social-icon">
                     <i class="${icon.class || 'fab fa-' + icon.name}"></i>
@@ -223,13 +194,13 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
       case 'footer':
         elementHtml = `
         <div id="element-${id}" class="canvas-element footer-element">
-          <footer class="footer-container">
+          <footer id="footer-${id}" class="footer-container">
             ${columns.map((col, i) => `
-              <div class="footer-column">
+              <div class="footer-column" id="footer-column-${id}-${i}">
                 <h4 class="footer-title">${col.title || `Column ${i+1}`}</h4>
                 <ul class="footer-links">
                   ${col.links.map((link, j) => `
-                    <li class="footer-link">
+                    <li class="footer-link" id="footer-link-${id}-${i}-${j}">
                       <a href="${link.url || '#'}">
                         ${link.icon ? `<i class="${link.icon}"></i>` : ''}
                         ${link.text || `Link ${j+1}`}
@@ -239,11 +210,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
                 </ul>
               </div>
             `).join('')}
-            ${copyrightText ? `
-              <div class="footer-bottom">
-                <p>${copyrightText}</p>
-              </div>
-            ` : ''}
+            ${copyrightText ? `<div class="footer-bottom" id="footer-bottom-${id}"><p>${copyrightText}</p></div>` : ''}
           </footer>
         </div>`;
         break;
@@ -251,132 +218,32 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
       case 'image':
         elementHtml = `
         <div id="element-${id}" class="canvas-element image-element">
-          <img src="${baseUrl}${imageUrl}" alt="${label || 'Image'}" class="content-image">
-          ${elementContent ? `<div class="image-caption">${elementContent}</div>` : ''}
+          <img id="image-${id}" src="${baseUrl}${imageUrl}" alt="${label || 'Image'}" class="content-image">
+          ${elementContent ? `<div class="image-caption" id="caption-${id}">${elementContent}</div>` : ''}
         </div>`;
         break;
 
-      // Add all other element types you support
       default:
         elementHtml = `
         <div id="element-${id}" class="canvas-element ${type}-element">
-          ${elementContent}
+          <div id="${type}-content-${id}">
+            ${elementContent}
+          </div>
         </div>`;
     }
 
     htmlElements.push(elementHtml);
   });
 
-  // Add component-specific styles
   const componentStyles = `
-  /* Form Styles */
-  .form-container {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    width: 100%;
-  }
-  
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .form-group label {
-    font-weight: 600;
-  }
-  
-  .form-group input,
-  .form-group textarea,
-  .form-group select {
-    padding: 10px 15px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: inherit;
-    width: 100%;
-  }
-  
-  .form-submit {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 12px 20px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 600;
-    margin-top: 10px;
-    align-self: flex-start;
-  }
-
-  /* Navbar Styles */
-  .navbar-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    padding: 15px 20px;
-  }
-  
-  .navbar-links {
-    display: flex;
-    gap: 20px;
-    list-style: none;
-  }
-  
-  .nav-link {
-    text-decoration: none;
-    color: inherit;
-    transition: color 0.3s;
-  }
-  
-  .nav-link:hover {
-    color: var(--primary-color);
-  }
-
-  /* Footer Styles */
-  .footer-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 30px;
-    width: 100%;
-    padding: 40px 20px;
-  }
-  
-  .footer-links {
-    list-style: none;
-  }
-  
-  .footer-link a {
-    text-decoration: none;
-    color: inherit;
-    transition: color 0.3s;
-  }
-  
-  .footer-link a:hover {
-    color: var(--primary-color);
-  }
-  
-  .footer-bottom {
-    grid-column: 1 / -1;
-    text-align: center;
-    padding-top: 20px;
-    margin-top: 20px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-  }
-
-  /* Image Styles */
-  .content-image {
-    max-width: 100%;
-    height: auto;
-    display: block;
-  }
-  
-  .image-caption {
-    text-align: center;
-    font-style: italic;
-    margin-top: 8px;
-  }`;
+  .form-container { display: flex; flex-direction: column; gap: 15px; width: 100%; }
+  .form-group { display: flex; flex-direction: column; gap: 8px; }
+  .form-submit { background-color: var(--primary-color); color: white; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 10px; align-self: flex-start; }
+  .navbar-container { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 15px 20px; }
+  .footer-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 30px; width: 100%; padding: 40px 20px; }
+  .content-image { max-width: 100%; height: auto; display: block; }
+  .image-caption { text-align: center; font-style: italic; margin-top: 8px; }
+  `;
 
   return {
     html: `<!DOCTYPE html>
