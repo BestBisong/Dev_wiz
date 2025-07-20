@@ -47,7 +47,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
     const paragraphs = [];
     const defaultStyles = {
       fontFamily: styles.fontFamily || 'Calibri',
-      fontSize: styles.fontSize || '22pt',
+      fontSize: styles.fontSize ? parseInt(styles.fontSize) * 2 : 22, // 22 half-points = 11pt
       color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight || 1.5
     };
@@ -86,22 +86,34 @@ function htmlToDocxParagraphs(html, styles = {}) {
             }
           } else if (child.tagName) {
             const textRunOptions = {
-              text: child.textContent,
-              font: defaultStyles.fontFamily,
-              size: defaultStyles.fontSize,
-              color: defaultStyles.color
+              text: child.textContent.trim(),
             };
 
-            if (child.getAttribute('style')) {
-              const childStyle = child.getAttribute('style');
-              if (childStyle.includes('color:')) {
-                const colorMatch = childStyle.match(/color:\s*(#[0-9a-f]+|rgb\([^)]+\)|rgba\([^)]+\)|\w+)/i);
-                if (colorMatch) {
-                  textRunOptions.color = normalizeColor(colorMatch[1]);
-                }
-              }
+            // Inline styles
+            const childStyle = child.getAttribute('style') || '';
+
+            const colorMatch = childStyle.match(/color:\s*([^;]+)/i);
+            if (colorMatch) {
+              textRunOptions.color = normalizeColor(colorMatch[1]);
+            } else {
+              textRunOptions.color = defaultStyles.color;
             }
 
+            const fontMatch = childStyle.match(/font-family:\s*([^;]+)/i);
+            if (fontMatch) {
+              textRunOptions.font = fontMatch[1].replace(/['"]/g, '').trim();
+            } else {
+              textRunOptions.font = defaultStyles.fontFamily;
+            }
+
+            const sizeMatch = childStyle.match(/font-size:\s*(\d+)px/i);
+            if (sizeMatch) {
+              textRunOptions.size = parseInt(sizeMatch[1]) * 2;
+            } else {
+              textRunOptions.size = defaultStyles.fontSize;
+            }
+
+            // Bold / Italics / Underline
             if (['STRONG', 'B'].includes(child.tagName)) textRunOptions.bold = true;
             if (['EM', 'I'].includes(child.tagName)) textRunOptions.italics = true;
             if (child.tagName === 'U') textRunOptions.underline = {};
@@ -164,20 +176,6 @@ exports.createArticle = async (req, res) => {
     const articleUrl = `${req.protocol}://${req.get('host')}/articles/${article.slug}`;
 
     const doc = new Document({
-      styles: {
-        paragraphStyles: [{
-          id: "Normal",
-          name: "Normal",
-          run: {
-            font: styles?.fontFamily || "Calibri",
-            size: styles?.fontSize || "24pt",
-            color: normalizeColor(styles?.color)
-          },
-          paragraph: {
-            spacing: { line: (styles?.lineHeight || 1.5) * 240 }
-          }
-        }]
-      },
       sections: [{
         children: [
           new Paragraph({
@@ -186,10 +184,7 @@ exports.createArticle = async (req, res) => {
             alignment: AlignmentType.CENTER,
             spacing: { after: 400 }
           }),
-          ...htmlToDocxParagraphs(content, {
-            ...styles,
-            color: normalizeColor(styles?.color)
-          }),
+          ...htmlToDocxParagraphs(content, styles),
           new Paragraph({
             text: `Read online: ${articleUrl}`,
             alignment: AlignmentType.CENTER,
@@ -201,7 +196,6 @@ exports.createArticle = async (req, res) => {
 
     const buffer = await Packer.toBuffer(doc);
 
-    
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="${slug}.docx"`,
