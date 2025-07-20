@@ -22,7 +22,7 @@ function generateHTMLAndCSS(elements, baseUrl = '') {
     line-height: 1.6;
     padding: 20px;
     position: relative;
-    min-height: 1000vh;
+    min-height: 100vh;
   }
 
   .canvas-container {
