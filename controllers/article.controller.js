@@ -39,8 +39,8 @@ function htmlToDocxParagraphs(html, styles = {}) {
       return [new Paragraph({ text: 'No content available' })];
     }
 
-    const root = parse(html.trim());
-    const paragraphs = [];
+    html = html.trim();
+    const isPlainText = !html.includes('<') && !html.includes('>');
 
     const defaultStyles = {
       font: (typeof styles.fontFamily === 'string' && styles.fontFamily.trim()) || 'Calibri',
@@ -48,6 +48,24 @@ function htmlToDocxParagraphs(html, styles = {}) {
       color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight ? Math.min(3, Math.max(1, parseFloat(styles.lineHeight))) : 1.5
     };
+
+    if (isPlainText) {
+      // Handle plain text line by line
+      const lines = html.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      return lines.map(line => new Paragraph({
+        children: [new TextRun({
+          text: line,
+          font: defaultStyles.font,
+          size: defaultStyles.size,
+          color: defaultStyles.color
+        })],
+        spacing: { line: defaultStyles.lineHeight * 240 }
+      }));
+    }
+
+    // Process HTML content
+    const root = parse(html);
+    const paragraphs = [];
 
     const processNode = (node, inheritedStyles = {}) => {
       const runs = [];
@@ -65,7 +83,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
             underline: inheritedStyles.underline || false
           }));
         }
-      } else if (node.tagName) { // Element Node
+      } else if (node.tagName) {
         const tag = node.tagName.toUpperCase();
         const style = node.getAttribute('style') || '';
 
@@ -95,7 +113,23 @@ function htmlToDocxParagraphs(html, styles = {}) {
     };
 
     root.childNodes.forEach(node => {
-      if (node.tagName) {
+      if (!node || typeof node !== 'object') return;
+
+      if (node.nodeType === 3) { // Text Node (standalone)
+        const text = node.textContent.trim();
+        if (text) {
+          paragraphs.push(new Paragraph({
+            children: [new TextRun({
+              text,
+              font: defaultStyles.font,
+              size: defaultStyles.size,
+              color: defaultStyles.color
+            })],
+            spacing: { line: defaultStyles.lineHeight * 240 }
+          }));
+        }
+      }
+      else if (node.tagName) {
         const tag = node.tagName.toUpperCase();
         const style = node.getAttribute('style') || '';
         let alignment = AlignmentType.LEFT;
@@ -124,6 +158,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
 
   } catch (error) {
     console.error('HTML to DOCX conversion error:', error);
+    console.error('Offending content:', html);
     return [new Paragraph({
       text: 'Content formatting error - please check your input',
       color: 'FF0000',
