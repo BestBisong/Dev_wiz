@@ -1,5 +1,3 @@
-// utils/sanitizer.js
-
 const sanitizeHtml = require('sanitize-html');
 
 function sanitize(input) {
