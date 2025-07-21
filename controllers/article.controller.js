@@ -10,6 +10,7 @@ const COLOR_PALETTE = {
   '000080': 'Navy', '808000': 'Olive', '800080': 'Purple', '008080': 'Teal', 'C0C0C0': 'Silver', '808080': 'Gray'
 };
 
+// Normalize color input
 function normalizeColor(color) {
   if (!color || typeof color !== 'string') return '000000';
   color = color.trim().toLowerCase();
@@ -32,6 +33,21 @@ function normalizeColor(color) {
   return '000000';
 }
 
+// Convert content safely to HTML string
+function safeContentToHtml(content) {
+  if (typeof content === 'object') {
+    // Pretty-print JSON in <pre> block
+    return `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+  }
+
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+
+  return '<p>No content provided</p>';
+}
+
+// Convert HTML to DOCX paragraphs
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
     if (!html || typeof html !== 'string') {
@@ -71,9 +87,9 @@ function htmlToDocxParagraphs(html, styles = {}) {
         }
 
         const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
-        options.size = sizeMatch
-          ? Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2
-          : options.size; // Use inherited/default if not found
+        if (sizeMatch) {
+          options.size = Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2;
+        }
 
         if (style.includes('font-weight:bold') || ['B', 'STRONG'].includes(node.tagName)) options.bold = true;
         if (style.includes('font-style:italic') || ['I', 'EM'].includes(node.tagName)) options.italics = true;
@@ -101,7 +117,6 @@ function htmlToDocxParagraphs(html, styles = {}) {
 
     root.childNodes.forEach(node => {
       const children = [];
-
       let alignment = AlignmentType.LEFT;
 
       if (node.nodeType === 3) {
@@ -109,7 +124,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
         if (textRun) children.push(textRun);
       } else if (node.tagName) {
         const style = node.getAttribute('style') || '';
-        const isBlock = ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(node.tagName.toUpperCase());
+        const isBlock = ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE'].includes(node.tagName.toUpperCase());
 
         if (isBlock) {
           if (/text-align:\s*center/i.test(style)) alignment = AlignmentType.CENTER;
@@ -156,9 +171,10 @@ function htmlToDocxParagraphs(html, styles = {}) {
   }
 }
 
+// Controller function
 exports.createArticle = async (req, res) => {
   try {
-    const { title, content, styles = {}, type = 'html' } = req.body;
+    const { title, content, styles = {} } = req.body;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ status: 'fail', message: 'A valid title is required' });
@@ -185,11 +201,12 @@ exports.createArticle = async (req, res) => {
       lineHeight: styles.lineHeight || 1.5
     };
 
-    const paragraphs = htmlToDocxParagraphs(typeof content === 'string' ? content : JSON.stringify(content), styles);
+    const safeHtml = safeContentToHtml(content);
+    const paragraphs = htmlToDocxParagraphs(safeHtml, styles);
 
     const article = await Article.create({
       title: sanitize(title),
-      content: sanitize(typeof content === 'string' ? content : JSON.stringify(content)),
+      content: sanitize(safeHtml),
       slug,
       isPublished: true,
       publishedAt: new Date(),
