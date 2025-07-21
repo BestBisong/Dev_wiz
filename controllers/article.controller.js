@@ -86,10 +86,45 @@ function htmlToDocxParagraphs(html, styles = {}) {
     const isPlainText = !html.includes('<') && !html.includes('>');
 
     const defaultStyles = {
-      font: (typeof styles.fontFamily === 'string' && styles.fontFamily.trim()) || 'Calibri',
+      fontFamily: (typeof styles.fontFamily === 'string' && styles.fontFamily.trim()) || 'Calibri',
+      fontSize: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) : 11,
       size: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) * 2 : 22,
       color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight ? Math.min(3, Math.max(1, parseFloat(styles.lineHeight))) : 1.5
+    };
+
+    const createTextRun = (text, node = null, parentStyles = {}) => {
+      if (!text || !text.trim()) return null;
+
+      const options = {
+        text: text.replace(/\s+/g, ' ').trim(),
+        font: parentStyles.fontFamily || defaultStyles.fontFamily,
+        size: parentStyles.size || defaultStyles.size,
+        color: parentStyles.color || defaultStyles.color
+      };
+
+      if (node && node.getAttribute) {
+        const style = node.getAttribute('style') || '';
+
+        const colorMatch = style.match(/color:\s*([^;]+)/i);
+        if (colorMatch) options.color = normalizeColor(colorMatch[1]);
+
+        const fontMatch = style.match(/font-family:\s*([^;]+)/i);
+        if (fontMatch) {
+          options.font = fontMatch[1].replace(/['"]/g, '').split(',')[0].trim();
+        }
+
+        const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
+        options.size = sizeMatch
+          ? Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2
+          : options.size; // Use inherited/default if not found
+
+        if (style.includes('font-weight:bold') || ['B', 'STRONG'].includes(node.tagName)) options.bold = true;
+        if (style.includes('font-style:italic') || ['I', 'EM'].includes(node.tagName)) options.italics = true;
+        if (style.includes('text-decoration:underline') || node.tagName === 'U') options.underline = {};
+      }
+
+      return new TextRun(options);
     };
 
     if (isPlainText) {
@@ -97,7 +132,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
       return lines.map(line => new Paragraph({
         children: [new TextRun({
           text: line,
-          font: defaultStyles.font,
+          font: defaultStyles.fontFamily,
           size: defaultStyles.size,
           color: defaultStyles.color
         })],
@@ -108,72 +143,32 @@ function htmlToDocxParagraphs(html, styles = {}) {
     const root = parse(html);
     const paragraphs = [];
 
-    const processNode = (node, inheritedStyles = {}) => {
-      const runs = [];
+    root.childNodes.forEach(node => {
+      const children = [];
 
       if (node.nodeType === 3) {
-        const text = node.textContent.trim();
-        if (text.length > 0) {
-          runs.push(new TextRun({
-            text,
-            font: inheritedStyles.font || defaultStyles.font,
-            size: inheritedStyles.size || defaultStyles.size,
-            color: inheritedStyles.color || defaultStyles.color,
-            bold: inheritedStyles.bold || false,
-            italics: inheritedStyles.italics || false,
-            underline: inheritedStyles.underline || false
-          }));
-        }
+        const textRun = createTextRun(node.textContent, node);
+        if (textRun) children.push(textRun);
       } else if (node.tagName) {
-        const tag = node.tagName.toUpperCase();
-        const style = node.getAttribute('style') || '';
-
-        const newStyles = { ...inheritedStyles };
-
-        const colorMatch = style.match(/color:\s*([^;]+)/i);
-        if (colorMatch) newStyles.color = normalizeColor(colorMatch[1]);
-
-        const fontMatch = style.match(/font-family:\s*([^;]+)/i);
-        if (fontMatch) newStyles.font = fontMatch[1].replace(/['"]/g, '').split(',')[0].trim();
-
-        const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
-        if (sizeMatch) {
-          newStyles.size = Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2;
-        }
-
-        if (style.includes('font-weight:bold') || ['B', 'STRONG'].includes(tag)) newStyles.bold = true;
-        if (style.includes('font-style:italic') || ['I', 'EM'].includes(tag)) newStyles.italics = true;
-        if (style.includes('text-decoration:underline') || tag === 'U') newStyles.underline = {};
-
         node.childNodes.forEach(child => {
-          runs.push(...processNode(child, newStyles));
+          const textRun = createTextRun(child.textContent, child, {});
+          if (textRun) children.push(textRun);
         });
       }
 
-      return runs;
-    };
+      // Detect alignment at the paragraph level
+      let alignment = AlignmentType.LEFT;
 
-    root.childNodes.forEach(node => {
-      if (!node || typeof node !== 'object') return;
+      if (node.tagName) {
+        const style = node.getAttribute('style') || '';
+        if (/text-align:\s*center/i.test(style)) alignment = AlignmentType.CENTER;
+        else if (/text-align:\s*right/i.test(style)) alignment = AlignmentType.RIGHT;
+        else if (/text-align:\s*justify/i.test(style)) alignment = AlignmentType.JUSTIFIED;
+      }
 
-      const runs = node.nodeType === 3
-        ? processNode(node, defaultStyles)
-        : node.tagName
-          ? processNode(node, defaultStyles)
-          : [];
-
-      if (runs.length > 0) {
-        let alignment = AlignmentType.LEFT;
-
-        if (node.tagName) {
-          const style = node.getAttribute('style') || '';
-          if (style.includes('text-align:center')) alignment = AlignmentType.CENTER;
-          else if (style.includes('text-align:right')) alignment = AlignmentType.RIGHT;
-          else if (style.includes('text-align:justify')) alignment = AlignmentType.JUSTIFIED;
-        }
-
+      if (children.length > 0) {
         paragraphs.push(new Paragraph({
-          children: runs,
+          children,
           alignment,
           spacing: { line: defaultStyles.lineHeight * 240 }
         }));
@@ -184,7 +179,7 @@ function htmlToDocxParagraphs(html, styles = {}) {
       return [new Paragraph({
         children: [new TextRun({
           text: ' ',
-          font: defaultStyles.font,
+          font: defaultStyles.fontFamily,
           size: defaultStyles.size,
           color: defaultStyles.color
         })]
@@ -227,7 +222,8 @@ exports.createArticle = async (req, res) => {
 
     const defaultStyles = {
       fontFamily: styles.fontFamily || 'Calibri',
-      fontSize: styles.fontSize || '11',
+      fontSize: styles.fontSize || 11,
+      size: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) * 2 : 22,
       color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight || 1.5
     };
@@ -237,7 +233,7 @@ exports.createArticle = async (req, res) => {
     if (type === 'json' && Array.isArray(content)) {
       paragraphs = jsonToDocxParagraphs(content, {
         font: defaultStyles.fontFamily,
-        size: defaultStyles.fontSize * 2,
+        size: defaultStyles.size,
         color: defaultStyles.color,
         lineHeight: defaultStyles.lineHeight
       });
