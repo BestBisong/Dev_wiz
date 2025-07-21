@@ -1,4 +1,4 @@
-function generateHTMLAndCSS(elements, baseUrl = '', customTexts = {}) {
+function generateHTMLAndCSS(elements, baseUrl = '') {
   if (!Array.isArray(elements)) {
     throw new Error('Elements must be an array');
   }
@@ -40,9 +40,7 @@ function generateHTMLAndCSS(elements, baseUrl = '', customTexts = {}) {
   .canvas-element {
     position: absolute;
     transform: translate(0, 0);
-    min-height: auto;
-    padding: 8px;
-    box-sizing: border-box;
+    min-height: auto ;
   }`;
 
   const cssRules = [];
@@ -58,13 +56,27 @@ function generateHTMLAndCSS(elements, baseUrl = '', customTexts = {}) {
       size = { width: 'auto', height: 'auto' },
       content = '',
       customText = '',
+      imageUrl = '',
+      items = [],
+      fields = [],
+      columns = [],
+      links = [],
       mapUrl = '',
+      placeholder = '',
+      required = false,
+      options = [],
+      buttonText = 'Submit',
+      logo = {},
+      socialIcons = [],
+      copyrightText = '',
+      backgroundColor,
+      textColor,
+      borderColor,
+      borderRadius,
+      fontSize,
+      fontWeight,
     } = element;
 
-    // Use customTexts if available, otherwise fall back to element's customText or content
-    const elementContent = customTexts[id] || customText || content || label || '';
-
-    // CSS Generation
     let cssRule = `#element-${id} {\n`;
     cssRule += `  position: absolute;\n`;
     cssRule += `  left: ${position.x}px;\n`;
@@ -72,10 +84,20 @@ function generateHTMLAndCSS(elements, baseUrl = '', customTexts = {}) {
     cssRule += `  width: ${typeof size.width === 'number' ? size.width + 'px' : size.width};\n`;
     cssRule += `  height: ${typeof size.height === 'number' ? size.height + 'px' : size.height};\n`;
 
-    // Convert style object to CSS
-    Object.entries(styles).forEach(([key, value]) => {
+    const styleProperties = {
+      ...styles,
+      backgroundColor: backgroundColor || styles.backgroundColor,
+      color: textColor || styles.color,
+      borderColor: borderColor || styles.borderColor,
+      borderRadius: borderRadius || styles.borderRadius,
+      fontSize: fontSize || styles.fontSize,
+      fontWeight: fontWeight || styles.fontWeight,
+    };
+
+    Object.entries(styleProperties).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
         const cssProperty = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+
         let cssValue = value;
 
         if (typeof value === 'number' && !['zIndex', 'opacity', 'fontWeight', 'lineHeight', 'flex'].includes(key)) {
@@ -93,82 +115,121 @@ function generateHTMLAndCSS(elements, baseUrl = '', customTexts = {}) {
 
     cssRules.push(cssRule + '}');
 
-    // HTML Generation
+    // HTML Generation with IDs in ALL components
     let elementHtml = '';
-    
+    const elementContent = customText || content || '';
+
     switch (type.toLowerCase()) {
-      case 'text':
-        elementHtml = `
-        <div id="element-${id}" class="canvas-element text-element">
-          <p>${elementContent}</p>
-        </div>`;
-        break;
-
-      case 'header':
-        elementHtml = `
-        <div id="element-${id}" class="canvas-element header-element">
-          <h1>${elementContent}</h1>
-        </div>`;
-        break;
-
-      case 'button':
-        elementHtml = `
-        <div id="element-${id}" class="canvas-element button-element">
-          <button class="styled-button">${elementContent}</button>
-        </div>`;
-        break;
-
-      case 'input':
-        elementHtml = `
-        <div id="element-${id}" class="canvas-element input-element">
-          <input type="text" value="${elementContent}" placeholder="${elementContent || 'Enter text'}" />
-        </div>`;
-        break;
-
       case 'map':
         elementHtml = `
         <div id="element-${id}" class="canvas-element map-element">
-          ${mapUrl ? `
           <iframe 
-            src="${mapUrl.startsWith('http') ? mapUrl : `https://${mapUrl}`}" 
-            width="100%" 
-            height="100%" 
+            id="map-${id}"
+            src="${mapUrl}" 
+            width="${typeof size.width === 'number' ? size.width + 'px' : size.width}" 
+            height="${typeof size.height === 'number' ? size.height + 'px' : size.height}" 
             style="border:0;" 
             allowfullscreen 
-            loading="lazy"
-            referrerpolicy="no-referrer-when-downgrade">
+            loading="lazy">
           </iframe>
-          ` : '<div class="map-placeholder">Map URL not provided</div>'}
         </div>`;
         break;
 
-      case 'section':
+      case 'form':
         elementHtml = `
-        <div id="element-${id}" class="canvas-element section-element">
-          <div class="section-content">${elementContent}</div>
+        <div id="element-${id}" class="canvas-element form-element">
+          <form id="form-${id}" class="form-container">
+            ${label ? `<h3 class="form-title">${label}</h3>` : ''}
+            ${fields.map((field, i) => `
+              <div class="form-group">
+                <label for="field-${id}-${i}">${field.label || `Field ${i+1}`}</label>
+                ${field.type === 'textarea' ? `
+                  <textarea id="field-${id}-${i}" name="${field.name || `field-${i}`}" placeholder="${field.placeholder || placeholder}" ${field.required || required ? 'required' : ''}></textarea>
+                ` : field.type === 'select' ? `
+                  <select id="field-${id}-${i}" name="${field.name || `field-${i}`}" ${field.required || required ? 'required' : ''}>
+                    ${(field.options || options).map(opt => `<option value="${opt.value || opt}">${opt.label || opt}</option>`).join('')}
+                  </select>
+                ` : `
+                  <input type="${field.type || 'text'}" id="field-${id}-${i}" name="${field.name || `field-${i}`}" placeholder="${field.placeholder || placeholder}" ${field.required || required ? 'required' : ''}>
+                `}
+              </div>
+            `).join('')}
+            <button type="submit" class="form-submit" id="submit-${id}">${buttonText}</button>
+          </form>
         </div>`;
         break;
 
       case 'navbar':
         elementHtml = `
         <div id="element-${id}" class="canvas-element navbar-element">
-          <nav>
-            <div class="logo">${elementContent || 'Logo'}</div>
-            <ul>
-              <li><a href="#">Home</a></li>
-              <li><a href="#">About</a></li>
-              <li><a href="#">Contact</a></li>
+          <nav id="navbar-${id}" class="navbar-container">
+            ${logo.text || logo.image ? `
+              <div class="navbar-brand" id="navbar-brand-${id}">
+                ${logo.image ? `<img src="${baseUrl}${logo.image}" alt="${logo.text || 'Logo'}" class="navbar-logo">` : ''}
+                ${logo.text ? `<span class="navbar-logo-text">${logo.text}</span>` : ''}
+              </div>
+            ` : ''}
+            <ul class="navbar-links" id="navbar-links-${id}">
+              ${items.map((item, i) => `
+                <li class="nav-item" id="nav-item-${id}-${i}">
+                  <a href="${item.link || '#'}" class="nav-link">
+                    ${item.icon ? `<i class="${item.icon}"></i>` : ''}
+                    ${item.text || `Link ${i+1}`}
+                  </a>
+                </li>
+              `).join('')}
             </ul>
+            ${socialIcons.length > 0 ? `
+              <div class="navbar-social" id="navbar-social-${id}">
+                ${socialIcons.map(icon => `
+                  <a href="${icon.link || '#'}" class="social-icon">
+                    <i class="${icon.class || 'fab fa-' + icon.name}"></i>
+                  </a>
+                `).join('')}
+              </div>
+            ` : ''}
           </nav>
         </div>`;
         break;
 
-      // Add cases for all your other component types...
+      case 'footer':
+        elementHtml = `
+        <div id="element-${id}" class="canvas-element footer-element">
+          <footer id="footer-${id}" class="footer-container">
+            ${columns.map((col, i) => `
+              <div class="footer-column" id="footer-column-${id}-${i}">
+                <h4 class="footer-title">${col.title || `Column ${i+1}`}</h4>
+                <ul class="footer-links">
+                  ${col.links.map((link, j) => `
+                    <li class="footer-link" id="footer-link-${id}-${i}-${j}">
+                      <a href="${link.url || '#'}">
+                        ${link.icon ? `<i class="${link.icon}"></i>` : ''}
+                        ${link.text || `Link ${j+1}`}
+                      </a>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            `).join('')}
+            ${copyrightText ? `<div class="footer-bottom" id="footer-bottom-${id}"><p>${copyrightText}</p></div>` : ''}
+          </footer>
+        </div>`;
+        break;
+
+      case 'image':
+        elementHtml = `
+        <div id="element-${id}" class="canvas-element image-element">
+          <img id="image-${id}" src="${baseUrl}${imageUrl}" alt="${label || 'Image'}" class="content-image">
+          ${elementContent ? `<div class="image-caption" id="caption-${id}">${elementContent}</div>` : ''}
+        </div>`;
+        break;
 
       default:
         elementHtml = `
-        <div id="element-${id}" class="canvas-element default-element">
-          <div>${elementContent}</div>
+        <div id="element-${id}" class="canvas-element ${type}-element">
+          <div id="${type}-content-${id}">
+            ${elementContent}
+          </div>
         </div>`;
     }
 
@@ -176,79 +237,14 @@ function generateHTMLAndCSS(elements, baseUrl = '', customTexts = {}) {
   });
 
   const componentStyles = `
-  /* Text elements */
-  .text-element p {
-    margin: 0;
-    white-space: pre-wrap;
-  }
-
-  /* Header elements */
-  .header-element h1 {
-    margin: 0;
-    font-size: inherit;
-    font-weight: inherit;
-  }
-
-  /* Button elements */
-  .styled-button {
-    padding: 8px 16px;
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: inherit;
-    font-family: inherit;
-  }
-
-  /* Input elements */
-  .input-element input {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: inherit;
-    font-family: inherit;
-  }
-
-  /* Section elements */
-  .section-element {
-    border: 1px dashed #ccc;
-    background-color: rgba(240, 240, 240, 0.5);
-  }
-
-  /* Navbar elements */
-  .navbar-element nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background-color: #f8f9fa;
-    width: 100%;
-  }
-  .navbar-element ul {
-    display: flex;
-    list-style: none;
-    gap: 15px;
-    margin: 0;
-    padding: 0;
-  }
-  .navbar-element a {
-    text-decoration: none;
-    color: inherit;
-  }
-
-  /* Map elements */
-  .map-element {
-    background-color: #f0f0f0;
-  }
-  .map-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #666;
-  }`;
+  .form-container { display: flex; flex-direction: column; gap: 15px; width: 100%; }
+  .form-group { display: flex; flex-direction: column; gap: 8px; }
+  .form-submit { background-color: var(--primary-color); color: white; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 10px; align-self: flex-start; }
+  .navbar-container { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 15px 20px; }
+  .footer-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 30px; width: 100%; padding: 40px 20px; }
+  .content-image { max-width: 100%; height: auto; display: block; }
+  .image-caption { text-align: center; font-style: italic; margin-top: 8px; }
+  `;
 
   return {
     html: `<!DOCTYPE html>
