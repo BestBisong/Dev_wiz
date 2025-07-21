@@ -4,7 +4,6 @@ const { parse } = require('node-html-parser');
 const slugify = require('slugify');
 const { sanitize } = require('../utils/sanitizer');
 
-// Color palette mapping
 const COLOR_PALETTE = {
   '000000': 'Black', 'FFFFFF': 'White', 'FF0000': 'Red', '00FF00': 'Green', '0000FF': 'Blue',
   'FFFF00': 'Yellow', 'FF00FF': 'Magenta', '00FFFF': 'Cyan', '800000': 'Maroon', '008000': 'DarkGreen',
@@ -33,6 +32,50 @@ function normalizeColor(color) {
   return '000000';
 }
 
+function jsonToDocxParagraphs(jsonArray, defaultStyles) {
+  const paragraphs = [];
+
+  jsonArray.forEach(element => {
+    const type = element.type || 'paragraph';
+    const text = element.text || '';
+    const style = element.style || {};
+
+    const runOptions = {
+      text,
+      font: style.fontFamily || defaultStyles.font,
+      size: style.fontSize ? Math.max(8, Math.min(72, parseInt(style.fontSize))) * 2 : defaultStyles.size,
+      color: style.color ? normalizeColor(style.color) : defaultStyles.color,
+      bold: style.bold || false,
+      italics: style.italics || false,
+      underline: style.underline ? {} : false
+    };
+
+    const run = new TextRun(runOptions);
+
+    let paragraphOptions = {
+      children: [run],
+      spacing: { line: defaultStyles.lineHeight * 240 }
+    };
+
+    if (type === 'heading') {
+      if (element.level === 1) paragraphOptions.heading = HeadingLevel.HEADING_1;
+      if (element.level === 2) paragraphOptions.heading = HeadingLevel.HEADING_2;
+      if (element.level === 3) paragraphOptions.heading = HeadingLevel.HEADING_3;
+    }
+
+    if (style.alignment) {
+      const align = style.alignment.toLowerCase();
+      if (align === 'center') paragraphOptions.alignment = AlignmentType.CENTER;
+      if (align === 'right') paragraphOptions.alignment = AlignmentType.RIGHT;
+      if (align === 'justify') paragraphOptions.alignment = AlignmentType.JUSTIFIED;
+    }
+
+    paragraphs.push(new Paragraph(paragraphOptions));
+  });
+
+  return paragraphs;
+}
+
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
     if (!html || typeof html !== 'string') {
@@ -50,7 +93,6 @@ function htmlToDocxParagraphs(html, styles = {}) {
     };
 
     if (isPlainText) {
-      // Handle plain text line by line
       const lines = html.split('\n').map(line => line.trim()).filter(line => line.length > 0);
       return lines.map(line => new Paragraph({
         children: [new TextRun({
@@ -63,16 +105,15 @@ function htmlToDocxParagraphs(html, styles = {}) {
       }));
     }
 
-    // Process HTML content
     const root = parse(html);
     const paragraphs = [];
 
     const processNode = (node, inheritedStyles = {}) => {
       const runs = [];
 
-      if (node.nodeType === 3) { // Text Node
+      if (node.nodeType === 3) {
         const text = node.textContent.trim();
-        if (text) {
+        if (text.length > 0) {
           runs.push(new TextRun({
             text,
             font: inheritedStyles.font || defaultStyles.font,
@@ -115,46 +156,42 @@ function htmlToDocxParagraphs(html, styles = {}) {
     root.childNodes.forEach(node => {
       if (!node || typeof node !== 'object') return;
 
-      if (node.nodeType === 3) { // Text Node (standalone)
-        const text = node.textContent.trim();
-        if (text) {
-          paragraphs.push(new Paragraph({
-            children: [new TextRun({
-              text,
-              font: defaultStyles.font,
-              size: defaultStyles.size,
-              color: defaultStyles.color
-            })],
-            spacing: { line: defaultStyles.lineHeight * 240 }
-          }));
-        }
-      }
-      else if (node.tagName) {
-        const tag = node.tagName.toUpperCase();
-        const style = node.getAttribute('style') || '';
+      const runs = node.nodeType === 3
+        ? processNode(node, defaultStyles)
+        : node.tagName
+          ? processNode(node, defaultStyles)
+          : [];
+
+      if (runs.length > 0) {
         let alignment = AlignmentType.LEFT;
 
-        if (style.includes('text-align:center')) alignment = AlignmentType.CENTER;
-        else if (style.includes('text-align:right')) alignment = AlignmentType.RIGHT;
-        else if (style.includes('text-align:justify')) alignment = AlignmentType.JUSTIFIED;
+        if (node.tagName) {
+          const style = node.getAttribute('style') || '';
+          if (style.includes('text-align:center')) alignment = AlignmentType.CENTER;
+          else if (style.includes('text-align:right')) alignment = AlignmentType.RIGHT;
+          else if (style.includes('text-align:justify')) alignment = AlignmentType.JUSTIFIED;
+        }
 
-        const runs = processNode(node, defaultStyles);
-
-        const paragraphOptions = {
+        paragraphs.push(new Paragraph({
           children: runs,
           alignment,
           spacing: { line: defaultStyles.lineHeight * 240 }
-        };
-
-        if (tag === 'H1') paragraphOptions.heading = HeadingLevel.HEADING_1;
-        if (tag === 'H2') paragraphOptions.heading = HeadingLevel.HEADING_2;
-        if (tag === 'H3') paragraphOptions.heading = HeadingLevel.HEADING_3;
-
-        paragraphs.push(new Paragraph(paragraphOptions));
+        }));
       }
     });
 
-    return paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: '' })];
+    if (paragraphs.length === 0) {
+      return [new Paragraph({
+        children: [new TextRun({
+          text: ' ',
+          font: defaultStyles.font,
+          size: defaultStyles.size,
+          color: defaultStyles.color
+        })]
+      })];
+    }
+
+    return paragraphs;
 
   } catch (error) {
     console.error('HTML to DOCX conversion error:', error);
@@ -169,14 +206,14 @@ function htmlToDocxParagraphs(html, styles = {}) {
 
 exports.createArticle = async (req, res) => {
   try {
-    const { title, content, styles = {} } = req.body;
+    const { title, content, styles = {}, type = 'html' } = req.body;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ status: 'fail', message: 'A valid title is required' });
     }
 
-    if (!content || typeof content !== 'string' || !content.trim()) {
-      return res.status(400).json({ status: 'fail', message: 'Valid content is required' });
+    if (!content) {
+      return res.status(400).json({ status: 'fail', message: 'Content is required' });
     }
 
     let slug = slugify(title, { lower: true, strict: true, remove: /[*+~.()'"!:@]/g }).substring(0, 100);
@@ -188,34 +225,38 @@ exports.createArticle = async (req, res) => {
       attempts++;
     }
 
+    const defaultStyles = {
+      fontFamily: styles.fontFamily || 'Calibri',
+      fontSize: styles.fontSize || '11',
+      color: normalizeColor(styles.color),
+      lineHeight: styles.lineHeight || 1.5
+    };
+
+    let paragraphs = [];
+
+    if (type === 'json' && Array.isArray(content)) {
+      paragraphs = jsonToDocxParagraphs(content, {
+        font: defaultStyles.fontFamily,
+        size: defaultStyles.fontSize * 2,
+        color: defaultStyles.color,
+        lineHeight: defaultStyles.lineHeight
+      });
+    } else {
+      paragraphs = htmlToDocxParagraphs(typeof content === 'string' ? content : JSON.stringify(content), styles);
+    }
+
     const article = await Article.create({
       title: sanitize(title),
-      content: sanitize(content),
+      content: sanitize(typeof content === 'string' ? content : JSON.stringify(content)),
       slug,
       isPublished: true,
       publishedAt: new Date(),
-      styles: {
-        fontFamily: styles.fontFamily || 'Calibri',
-        fontSize: styles.fontSize || '11',
-        color: normalizeColor(styles.color),
-        lineHeight: styles.lineHeight || 1.5
-      }
+      styles: defaultStyles
     });
 
     const articleUrl = `${req.protocol}://${req.get('host')}/articles/${article.slug}`;
 
     const doc = new Document({
-      title: sanitize(title),
-      description: `Article: ${sanitize(title)}`,
-      creator: 'Your Application Name',
-      styles: {
-        paragraphStyles: [{
-          id: 'Normal',
-          name: 'Normal',
-          run: { font: 'Calibri', size: 24 },
-          paragraph: { spacing: { line: 276 } }
-        }]
-      },
       sections: [{
         properties: {},
         children: [
@@ -225,12 +266,11 @@ exports.createArticle = async (req, res) => {
             alignment: AlignmentType.CENTER,
             spacing: { after: 400, before: 400 }
           }),
-          ...htmlToDocxParagraphs(content, styles),
+          ...paragraphs,
           new Paragraph({
             text: `Read online: ${articleUrl}`,
             alignment: AlignmentType.CENTER,
-            spacing: { before: 400 },
-            style: 'Normal'
+            spacing: { before: 400 }
           })
         ]
       }]
