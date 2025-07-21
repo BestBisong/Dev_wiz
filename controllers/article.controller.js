@@ -10,7 +10,6 @@ const COLOR_PALETTE = {
   '000080': 'Navy', '808000': 'Olive', '800080': 'Purple', '008080': 'Teal', 'C0C0C0': 'Silver', '808080': 'Gray'
 };
 
-// Normalize color input
 function normalizeColor(color) {
   if (!color || typeof color !== 'string') return '000000';
   color = color.trim().toLowerCase();
@@ -33,21 +32,21 @@ function normalizeColor(color) {
   return '000000';
 }
 
-// Convert content safely to HTML string
+function safeFontSize(sizePx, fallback = 22) {
+  const size = parseFloat(sizePx);
+  return isNaN(size) ? fallback : Math.max(8, Math.min(72, size)) * 2;
+}
+
 function safeContentToHtml(content) {
   if (typeof content === 'object') {
-    // Pretty-print JSON in <pre> block
     return `<pre>${JSON.stringify(content, null, 2)}</pre>`;
   }
-
   if (typeof content === 'string') {
     return content.trim();
   }
-
   return '<p>No content provided</p>';
 }
 
-// Convert HTML to DOCX paragraphs
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
     if (!html || typeof html !== 'string') {
@@ -59,8 +58,8 @@ function htmlToDocxParagraphs(html, styles = {}) {
 
     const defaultStyles = {
       fontFamily: (typeof styles.fontFamily === 'string' && styles.fontFamily.trim()) || 'Calibri',
-      fontSize: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) : 11,
-      size: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) * 2 : 22,
+      fontSize: styles.fontSize ? parseFloat(styles.fontSize) : 11,
+      size: safeFontSize(styles.fontSize, 22),
       color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight ? Math.min(3, Math.max(1, parseFloat(styles.lineHeight))) : 1.5
     };
@@ -86,9 +85,9 @@ function htmlToDocxParagraphs(html, styles = {}) {
           options.font = fontMatch[1].replace(/['"]/g, '').split(',')[0].trim();
         }
 
-        const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
+        const sizeMatch = style.match(/font-size:\s*([\d.]+)px/i);
         if (sizeMatch) {
-          options.size = Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2;
+          options.size = safeFontSize(sizeMatch[1], defaultStyles.size);
         }
 
         if (style.includes('font-weight:bold') || ['B', 'STRONG'].includes(node.tagName)) options.bold = true;
@@ -116,34 +115,37 @@ function htmlToDocxParagraphs(html, styles = {}) {
     const paragraphs = [];
 
     root.childNodes.forEach(node => {
-      const children = [];
-      let alignment = AlignmentType.LEFT;
-
       if (node.nodeType === 3) {
+        // Text node outside any element
         const textRun = createTextRun(node.textContent, node);
-        if (textRun) children.push(textRun);
+        if (textRun) {
+          paragraphs.push(new Paragraph({
+            children: [textRun],
+            alignment: AlignmentType.LEFT,
+            spacing: { line: defaultStyles.lineHeight * 240 }
+          }));
+        }
       } else if (node.tagName) {
         const style = node.getAttribute('style') || '';
-        const isBlock = ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE'].includes(node.tagName.toUpperCase());
+        let alignment = AlignmentType.LEFT;
 
-        if (isBlock) {
-          if (/text-align:\s*center/i.test(style)) alignment = AlignmentType.CENTER;
-          else if (/text-align:\s*right/i.test(style)) alignment = AlignmentType.RIGHT;
-          else if (/text-align:\s*justify/i.test(style)) alignment = AlignmentType.JUSTIFIED;
-        }
+        if (/text-align:\s*center/i.test(style)) alignment = AlignmentType.CENTER;
+        else if (/text-align:\s*right/i.test(style)) alignment = AlignmentType.RIGHT;
+        else if (/text-align:\s*justify/i.test(style)) alignment = AlignmentType.JUSTIFIED;
 
+        const children = [];
         node.childNodes.forEach(child => {
           const textRun = createTextRun(child.textContent, child);
           if (textRun) children.push(textRun);
         });
-      }
 
-      if (children.length > 0) {
-        paragraphs.push(new Paragraph({
-          children,
-          alignment,
-          spacing: { line: defaultStyles.lineHeight * 240 }
-        }));
+        if (children.length > 0) {
+          paragraphs.push(new Paragraph({
+            children,
+            alignment,
+            spacing: { line: defaultStyles.lineHeight * 240 }
+          }));
+        }
       }
     });
 
@@ -171,7 +173,6 @@ function htmlToDocxParagraphs(html, styles = {}) {
   }
 }
 
-// Controller function
 exports.createArticle = async (req, res) => {
   try {
     const { title, content, styles = {} } = req.body;
@@ -196,7 +197,7 @@ exports.createArticle = async (req, res) => {
     const defaultStyles = {
       fontFamily: styles.fontFamily || 'Calibri',
       fontSize: styles.fontSize || 11,
-      size: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) * 2 : 22,
+      size: safeFontSize(styles.fontSize, 22),
       color: normalizeColor(styles.color),
       lineHeight: styles.lineHeight || 1.5
     };
