@@ -4,208 +4,127 @@ const { parse } = require('node-html-parser');
 const slugify = require('slugify');
 const { sanitize } = require('../utils/sanitizer');
 
-// Extended color palette mapping
+// Color palette mapping
 const COLOR_PALETTE = {
-  '000000': 'Black',
-  'FFFFFF': 'White',
-  'FF0000': 'Red',
-  '00FF00': 'Green',
-  '0000FF': 'Blue',
-  'FFFF00': 'Yellow',
-  'FF00FF': 'Magenta',
-  '00FFFF': 'Cyan',
-  '800000': 'Maroon',
-  '008000': 'DarkGreen',
-  '000080': 'Navy',
-  '808000': 'Olive',
-  '800080': 'Purple',
-  '008080': 'Teal',
-  'C0C0C0': 'Silver',
-  '808080': 'Gray'
+  '000000': 'Black', 'FFFFFF': 'White', 'FF0000': 'Red', '00FF00': 'Green', '0000FF': 'Blue',
+  'FFFF00': 'Yellow', 'FF00FF': 'Magenta', '00FFFF': 'Cyan', '800000': 'Maroon', '008000': 'DarkGreen',
+  '000080': 'Navy', '808000': 'Olive', '800080': 'Purple', '008080': 'Teal', 'C0C0C0': 'Silver', '808080': 'Gray'
 };
 
-/**
- * Normalize color to hex format
- * @param {string} color - Input color string
- * @returns {string} Normalized 6-digit hex color (without #)
- */
 function normalizeColor(color) {
   if (!color || typeof color !== 'string') return '000000';
-  
-  // Remove whitespace and make lowercase
   color = color.trim().toLowerCase();
-  
-  // Handle hex colors (#fff or #ffffff)
+
   const hexMatch = color.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hexMatch) {
     const hex = hexMatch[1];
-    return hex.length === 3 ? 
-      hex.split('').map(c => c + c).join('').toUpperCase() : 
-      hex.toUpperCase();
+    return hex.length === 3 ? hex.split('').map(c => c + c).join('').toUpperCase() : hex.toUpperCase();
   }
 
-  // Handle named colors
-  const paletteEntry = Object.entries(COLOR_PALETTE).find(
-    ([hex, name]) => name.toLowerCase() === color
-  );
+  const paletteEntry = Object.entries(COLOR_PALETTE).find(([hex, name]) => name.toLowerCase() === color);
   if (paletteEntry) return paletteEntry[0];
 
-  // Handle rgb/rgba colors
   const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
   if (rgbMatch) {
     return [rgbMatch[1], rgbMatch[2], rgbMatch[3]]
-      .map(n => Math.min(255, Math.max(0, parseInt(n))).toString(16).padStart(2, '0'))
-      .join('')
-      .toUpperCase();
+      .map(n => Math.min(255, Math.max(0, parseInt(n))).toString(16).padStart(2, '0')).join('').toUpperCase();
   }
 
-  // Default to black if color is invalid
   return '000000';
 }
 
-/**
- * Convert HTML to DOCX paragraphs with proper styling
- * @param {string} html - HTML content to convert
- * @param {object} styles - Base styles to apply
- * @returns {Array} Array of docx Paragraph objects
- */
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
-    // Validate input
     if (!html || typeof html !== 'string') {
       return [new Paragraph({ text: 'No content available' })];
     }
 
-    html = html.trim();
-    if (!html) return [new Paragraph({ text: '' })];
-
-    const root = parse(html);
+    const root = parse(html.trim());
     const paragraphs = [];
-    
-    // Set default styles with validation
+
     const defaultStyles = {
-      fontFamily: (typeof styles.fontFamily === 'string' && styles.fontFamily.trim()) || 'Calibri',
-      fontSize: styles.fontSize ? 
-        Math.max(8, Math.min(72, parseInt(styles.fontSize))) * 2 : 22, // 11pt default
+      font: (typeof styles.fontFamily === 'string' && styles.fontFamily.trim()) || 'Calibri',
+      size: styles.fontSize ? Math.max(8, Math.min(72, parseInt(styles.fontSize))) * 2 : 22,
       color: normalizeColor(styles.color),
-      lineHeight: styles.lineHeight ? 
-        Math.min(3, Math.max(1, parseFloat(styles.lineHeight))) : 1.5
+      lineHeight: styles.lineHeight ? Math.min(3, Math.max(1, parseFloat(styles.lineHeight))) : 1.5
     };
 
-    /**
-     * Create a TextRun with proper styling
-     * @param {string} text - Text content
-     * @param {object} node - HTML node
-     * @param {object} parentStyles - Inherited styles
-     * @returns {TextRun|null} TextRun instance or null if empty
-     */
-    const createTextRun = (text, node = null, parentStyles = {}) => {
-      if (!text || !text.trim()) return null;
-      
-      const options = {
-        text: text.replace(/\s+/g, ' ').trim(), // Collapse whitespace
-        font: parentStyles.fontFamily || defaultStyles.fontFamily,
-        size: parentStyles.fontSize || defaultStyles.fontSize,
-        color: parentStyles.color || defaultStyles.color
-      };
+    const processNode = (node, inheritedStyles = {}) => {
+      const runs = [];
 
-      // Apply inline styles if node exists
-      if (node && node.getAttribute) {
-        const style = node.getAttribute('style') || '';
-        
-        // Color
-        const colorMatch = style.match(/color:\s*([^;]+)/i);
-        if (colorMatch) options.color = normalizeColor(colorMatch[1]);
-
-        // Font family
-        const fontMatch = style.match(/font-family:\s*([^;]+)/i);
-        if (fontMatch) {
-          options.font = fontMatch[1]
-            .replace(/['"]/g, '')
-            .split(',')[0] // Take first font in list
-            .trim();
-        }
-
-        // Font size
-        const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
-        if (sizeMatch) {
-          options.size = Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2;
-        }
-
-        // Text decoration
-        if (['STRONG', 'B'].includes(node.tagName)) options.bold = true;
-        if (['EM', 'I'].includes(node.tagName)) options.italics = true;
-        if (node.tagName === 'U' || style.includes('text-decoration:underline')) {
-          options.underline = {};
-        }
-      }
-
-      return new TextRun(options);
-    };
-
-    // Process each node in the HTML
-    root.childNodes.forEach((node) => {
-      // Text nodes
-      if (node.nodeType === 3) {
-        const textRun = createTextRun(node.textContent, node);
-        if (textRun) {
-          paragraphs.push(new Paragraph({
-            children: [textRun],
-            spacing: { line: defaultStyles.lineHeight * 240 }
+      if (node.nodeType === 3) { // Text Node
+        const text = node.textContent.trim();
+        if (text) {
+          runs.push(new TextRun({
+            text,
+            font: inheritedStyles.font || defaultStyles.font,
+            size: inheritedStyles.size || defaultStyles.size,
+            color: inheritedStyles.color || defaultStyles.color,
+            bold: inheritedStyles.bold || false,
+            italics: inheritedStyles.italics || false,
+            underline: inheritedStyles.underline || false
           }));
         }
-      }
-      // Element nodes
-      else if (node.tagName) {
+      } else if (node.tagName) { // Element Node
         const tag = node.tagName.toUpperCase();
-        const children = [];
-        let alignment = AlignmentType.LEFT;
         const style = node.getAttribute('style') || '';
 
-        // Determine alignment
+        const newStyles = { ...inheritedStyles };
+
+        const colorMatch = style.match(/color:\s*([^;]+)/i);
+        if (colorMatch) newStyles.color = normalizeColor(colorMatch[1]);
+
+        const fontMatch = style.match(/font-family:\s*([^;]+)/i);
+        if (fontMatch) newStyles.font = fontMatch[1].replace(/['"]/g, '').split(',')[0].trim();
+
+        const sizeMatch = style.match(/font-size:\s*(\d+)px/i);
+        if (sizeMatch) {
+          newStyles.size = Math.max(8, Math.min(72, parseInt(sizeMatch[1]))) * 2;
+        }
+
+        if (style.includes('font-weight:bold') || ['B', 'STRONG'].includes(tag)) newStyles.bold = true;
+        if (style.includes('font-style:italic') || ['I', 'EM'].includes(tag)) newStyles.italics = true;
+        if (style.includes('text-decoration:underline') || tag === 'U') newStyles.underline = {};
+
+        node.childNodes.forEach(child => {
+          runs.push(...processNode(child, newStyles));
+        });
+      }
+
+      return runs;
+    };
+
+    root.childNodes.forEach(node => {
+      if (node.tagName) {
+        const tag = node.tagName.toUpperCase();
+        const style = node.getAttribute('style') || '';
+        let alignment = AlignmentType.LEFT;
+
         if (style.includes('text-align:center')) alignment = AlignmentType.CENTER;
         else if (style.includes('text-align:right')) alignment = AlignmentType.RIGHT;
         else if (style.includes('text-align:justify')) alignment = AlignmentType.JUSTIFIED;
 
-        // Process child nodes
-        node.childNodes.forEach((child) => {
-          if (child.nodeType === 3) {
-            const textRun = createTextRun(child.textContent, child);
-            if (textRun) children.push(textRun);
-          } else if (child.tagName) {
-            const textRun = createTextRun(child.textContent, child);
-            if (textRun) children.push(textRun);
-          }
-        });
+        const runs = processNode(node, defaultStyles);
 
-        // Create paragraph if there's content or it's a paragraph/div tag
-        if (children.length > 0 || ['P', 'DIV'].includes(tag)) {
-          const paragraphOptions = {
-            children,
-            alignment,
-            spacing: { 
-              line: defaultStyles.lineHeight * 240,
-              before: ['H1', 'H2', 'H3'].includes(tag) ? 200 : 0,
-              after: ['H1', 'H2', 'H3'].includes(tag) ? 200 : 0
-            }
-          };
+        const paragraphOptions = {
+          children: runs,
+          alignment,
+          spacing: { line: defaultStyles.lineHeight * 240 }
+        };
 
-          // Add heading levels
-          if (tag === 'H1') paragraphOptions.heading = HeadingLevel.HEADING_1;
-          if (tag === 'H2') paragraphOptions.heading = HeadingLevel.HEADING_2;
-          if (tag === 'H3') paragraphOptions.heading = HeadingLevel.HEADING_3;
+        if (tag === 'H1') paragraphOptions.heading = HeadingLevel.HEADING_1;
+        if (tag === 'H2') paragraphOptions.heading = HeadingLevel.HEADING_2;
+        if (tag === 'H3') paragraphOptions.heading = HeadingLevel.HEADING_3;
 
-          paragraphs.push(new Paragraph(paragraphOptions));
-        }
+        paragraphs.push(new Paragraph(paragraphOptions));
       }
     });
 
-    // Ensure we always return at least one paragraph
     return paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: '' })];
 
   } catch (error) {
     console.error('HTML to DOCX conversion error:', error);
-    return [new Paragraph({ 
+    return [new Paragraph({
       text: 'Content formatting error - please check your input',
       color: 'FF0000',
       bold: true
@@ -213,35 +132,19 @@ function htmlToDocxParagraphs(html, styles = {}) {
   }
 }
 
-/**
- * Create an article and generate a DOCX download
- */
 exports.createArticle = async (req, res) => {
   try {
-    // Validate request
     const { title, content, styles = {} } = req.body;
-    
+
     if (!title || typeof title !== 'string' || !title.trim()) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'A valid title is required'
-      });
-    }
-    
-    if (!content || typeof content !== 'string' || !content.trim()) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Valid content is required'
-      });
+      return res.status(400).json({ status: 'fail', message: 'A valid title is required' });
     }
 
-    // Generate unique slug
-    let slug = slugify(title, { 
-      lower: true, 
-      strict: true,
-      remove: /[*+~.()'"!:@]/g
-    }).substring(0, 100); // Limit slug length
-    
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ status: 'fail', message: 'Valid content is required' });
+    }
+
+    let slug = slugify(title, { lower: true, strict: true, remove: /[*+~.()'"!:@]/g }).substring(0, 100);
     let attempts = 0;
     while (attempts < 5) {
       const exists = await Article.findOne({ slug }).lean();
@@ -250,7 +153,6 @@ exports.createArticle = async (req, res) => {
       attempts++;
     }
 
-    // Create article in database
     const article = await Article.create({
       title: sanitize(title),
       content: sanitize(content),
@@ -267,7 +169,6 @@ exports.createArticle = async (req, res) => {
 
     const articleUrl = `${req.protocol}://${req.get('host')}/articles/${article.slug}`;
 
-    // Create DOCX document
     const doc = new Document({
       title: sanitize(title),
       description: `Article: ${sanitize(title)}`,
@@ -276,13 +177,8 @@ exports.createArticle = async (req, res) => {
         paragraphStyles: [{
           id: 'Normal',
           name: 'Normal',
-          run: {
-            font: 'Calibri',
-            size: 24, // 12pt
-          },
-          paragraph: {
-            spacing: { line: 276 }, // 1.15 line spacing
-          }
+          run: { font: 'Calibri', size: 24 },
+          paragraph: { spacing: { line: 276 } }
         }]
       },
       sections: [{
@@ -305,13 +201,8 @@ exports.createArticle = async (req, res) => {
       }]
     });
 
-    // Generate document buffer
     const buffer = await Packer.toBuffer(doc);
-    if (!buffer || buffer.length === 0) {
-      throw new Error('Failed to generate document buffer');
-    }
 
-    // Send response
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="${slug}.docx"`,
@@ -325,10 +216,7 @@ exports.createArticle = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to create article',
-      error: process.env.NODE_ENV === 'development' ? {
-        message: error.message,
-        stack: error.stack
-      } : undefined
+      error: process.env.NODE_ENV === 'development' ? { message: error.message, stack: error.stack } : undefined
     });
   }
 };
