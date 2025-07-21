@@ -32,50 +32,6 @@ function normalizeColor(color) {
   return '000000';
 }
 
-function jsonToDocxParagraphs(jsonArray, defaultStyles) {
-  const paragraphs = [];
-
-  jsonArray.forEach(element => {
-    const type = element.type || 'paragraph';
-    const text = element.text || '';
-    const style = element.style || {};
-
-    const runOptions = {
-      text,
-      font: style.fontFamily || defaultStyles.font,
-      size: style.fontSize ? Math.max(8, Math.min(72, parseInt(style.fontSize))) * 2 : defaultStyles.size,
-      color: style.color ? normalizeColor(style.color) : defaultStyles.color,
-      bold: style.bold || false,
-      italics: style.italics || false,
-      underline: style.underline ? {} : false
-    };
-
-    const run = new TextRun(runOptions);
-
-    let paragraphOptions = {
-      children: [run],
-      spacing: { line: defaultStyles.lineHeight * 240 }
-    };
-
-    if (type === 'heading') {
-      if (element.level === 1) paragraphOptions.heading = HeadingLevel.HEADING_1;
-      if (element.level === 2) paragraphOptions.heading = HeadingLevel.HEADING_2;
-      if (element.level === 3) paragraphOptions.heading = HeadingLevel.HEADING_3;
-    }
-
-    if (style.alignment) {
-      const align = style.alignment.toLowerCase();
-      if (align === 'center') paragraphOptions.alignment = AlignmentType.CENTER;
-      if (align === 'right') paragraphOptions.alignment = AlignmentType.RIGHT;
-      if (align === 'justify') paragraphOptions.alignment = AlignmentType.JUSTIFIED;
-    }
-
-    paragraphs.push(new Paragraph(paragraphOptions));
-  });
-
-  return paragraphs;
-}
-
 function htmlToDocxParagraphs(html, styles = {}) {
   try {
     if (!html || typeof html !== 'string') {
@@ -146,24 +102,25 @@ function htmlToDocxParagraphs(html, styles = {}) {
     root.childNodes.forEach(node => {
       const children = [];
 
+      let alignment = AlignmentType.LEFT;
+
       if (node.nodeType === 3) {
         const textRun = createTextRun(node.textContent, node);
         if (textRun) children.push(textRun);
       } else if (node.tagName) {
+        const style = node.getAttribute('style') || '';
+        const isBlock = ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(node.tagName.toUpperCase());
+
+        if (isBlock) {
+          if (/text-align:\s*center/i.test(style)) alignment = AlignmentType.CENTER;
+          else if (/text-align:\s*right/i.test(style)) alignment = AlignmentType.RIGHT;
+          else if (/text-align:\s*justify/i.test(style)) alignment = AlignmentType.JUSTIFIED;
+        }
+
         node.childNodes.forEach(child => {
-          const textRun = createTextRun(child.textContent, child, {});
+          const textRun = createTextRun(child.textContent, child);
           if (textRun) children.push(textRun);
         });
-      }
-
-      // Detect alignment at the paragraph level
-      let alignment = AlignmentType.LEFT;
-
-      if (node.tagName) {
-        const style = node.getAttribute('style') || '';
-        if (/text-align:\s*center/i.test(style)) alignment = AlignmentType.CENTER;
-        else if (/text-align:\s*right/i.test(style)) alignment = AlignmentType.RIGHT;
-        else if (/text-align:\s*justify/i.test(style)) alignment = AlignmentType.JUSTIFIED;
       }
 
       if (children.length > 0) {
@@ -228,18 +185,7 @@ exports.createArticle = async (req, res) => {
       lineHeight: styles.lineHeight || 1.5
     };
 
-    let paragraphs = [];
-
-    if (type === 'json' && Array.isArray(content)) {
-      paragraphs = jsonToDocxParagraphs(content, {
-        font: defaultStyles.fontFamily,
-        size: defaultStyles.size,
-        color: defaultStyles.color,
-        lineHeight: defaultStyles.lineHeight
-      });
-    } else {
-      paragraphs = htmlToDocxParagraphs(typeof content === 'string' ? content : JSON.stringify(content), styles);
-    }
+    const paragraphs = htmlToDocxParagraphs(typeof content === 'string' ? content : JSON.stringify(content), styles);
 
     const article = await Article.create({
       title: sanitize(title),
